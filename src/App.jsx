@@ -140,7 +140,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
     await deleteEntry(id);
   };
 
-  const totalSets = exercises.reduce((a, e) => a + e.sets.filter(s => s.reps || s.weight).length, 0);
+  const totalSets = exercises.reduce((a, e) => a + e.sets.filter(s => (s.reps !== "" && s.reps !== undefined) || (s.weight !== "" && s.weight !== undefined)).length, 0);
   const lastRun = history.find(h => h.type === "run");
 
   if (mode === "pick") return (
