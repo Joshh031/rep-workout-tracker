@@ -97,7 +97,7 @@ function StretchTimer({ stretch, completed, onComplete }) {
 }
 
 // ── WORKOUT TAB ────────────────────────────────────────────────────────────
-function WorkoutTab({ history, setHistory, persist, dailyLog, sleepLog }) {
+function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sleepLog }) {
   const [mode, setMode] = useState("pick"); // pick | log
   const [workoutType, setWorkoutType] = useState(null);
   const [exercises, setExercises] = useState([]);
@@ -118,15 +118,26 @@ function WorkoutTab({ history, setHistory, persist, dailyLog, sleepLog }) {
   const removeExercise = (i) => setExercises(exercises.filter((_, idx) => idx !== i));
   const replaceWithAlt = (i, name) => { const u = [...exercises]; u[i].name = name; setExercises(u); setShowAlts(null); };
 
-  const saveWorkout = () => {
-    const entry = { id: Date.now(), date: new Date().toLocaleDateString(), type: workoutType, ...(workoutType === "run" ? { runData } : { exercises }) };
-    const newH = [entry, ...history];
-    setHistory(newH); persist(newH, dailyLog, sleepLog); setSaved(true);
+  const [quickFill, setQuickFill] = useState({});
+  const applyQuickFill = (i) => {
+    const qf = quickFill[i] || {};
+    const numSets = parseInt(qf.sets) || 1;
+    const u = [...exercises];
+    u[i].sets = Array.from({ length: numSets }, () => ({ reps: qf.reps || "", weight: qf.weight || "" }));
+    setExercises(u);
+    setQuickFill(prev => ({ ...prev, [i]: { ...prev[i], applied: true } }));
   };
 
-  const deleteWorkout = (id) => {
-    const newH = history.filter(h => h.id !== id);
-    setHistory(newH); persist(newH, dailyLog, sleepLog);
+  const saveWorkout = async () => {
+    const entry = { id: Date.now(), date: new Date().toLocaleDateString(), type: workoutType, ...(workoutType === "run" ? { runData } : { exercises }) };
+    const newH = [entry, ...history];
+    setHistory(newH);
+    await saveEntry(entry);
+    setSaved(true);
+  };
+
+  const deleteWorkout = async (id) => {
+    await deleteEntry(id);
   };
 
   const totalSets = exercises.reduce((a, e) => a + e.sets.filter(s => s.reps || s.weight).length, 0);
@@ -205,6 +216,42 @@ function WorkoutTab({ history, setHistory, persist, dailyLog, sleepLog }) {
             )}
 
             <div style={{ padding: "11px 14px" }}>
+              {/* Quick fill row */}
+              <div style={{ background: "#0e0e0e", border: "1px solid #1a1a1a", borderRadius: 6, padding: "10px 10px", marginBottom: 12 }}>
+                <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase", marginBottom: 8 }}>Quick Fill</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 6, alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 7, color: "#444", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Sets</div>
+                    <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="4" min="1" max="20"
+                      value={quickFill[i]?.sets || ""}
+                      onChange={e => setQuickFill(prev => ({ ...prev, [i]: { ...prev[i], sets: e.target.value, applied: false } }))} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 7, color: "#444", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Reps</div>
+                    <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="8"
+                      value={quickFill[i]?.reps || ""}
+                      onChange={e => setQuickFill(prev => ({ ...prev, [i]: { ...prev[i], reps: e.target.value, applied: false } }))} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 7, color: "#444", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Lbs</div>
+                    <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="135"
+                      value={quickFill[i]?.weight || ""}
+                      onChange={e => setQuickFill(prev => ({ ...prev, [i]: { ...prev[i], weight: e.target.value, applied: false } }))} />
+                  </div>
+                  <button onClick={() => applyQuickFill(i)} style={{
+                    background: quickFill[i]?.applied ? "#0b180b" : "#ff4d00",
+                    border: quickFill[i]?.applied ? "1px solid #1a4020" : "none",
+                    color: quickFill[i]?.applied ? "#3a9e4f" : "#fff",
+                    padding: "0 10px", borderRadius: 5, cursor: "pointer",
+                    fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1,
+                    height: 36, marginTop: 15, whiteSpace: "nowrap", transition: "all 0.2s"
+                  }}>
+                    {quickFill[i]?.applied ? "✓" : "FILL"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Individual sets */}
               <div style={{ display: "grid", gridTemplateColumns: "22px 1fr 1fr", gap: 8, marginBottom: 7 }}>
                 <span />
                 <span style={{ fontSize: 8, letterSpacing: 3, color: "#777", textTransform: "uppercase" }}>REPS</span>
@@ -275,7 +322,7 @@ function WorkoutTab({ history, setHistory, persist, dailyLog, sleepLog }) {
 }
 
 // ── DAILY TAB ──────────────────────────────────────────────────────────────
-function DailyTab({ dailyLog, setDailyLog, persist, history, sleepLog }) {
+function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
   const todayStr = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD for input
   const [daily, setDaily] = useState({ crunches: "", planks: "", pushups: "", steps: "" });
   const [logDate, setLogDate] = useState(todayStr());
@@ -284,11 +331,12 @@ function DailyTab({ dailyLog, setDailyLog, persist, history, sleepLog }) {
 
   const stretchCount = Object.values(stretchDone).filter(Boolean).length;
 
-  const saveDaily = () => {
+  const saveDaily = async () => {
     const displayDate = logDate ? new Date(logDate + "T12:00:00").toLocaleDateString() : new Date().toLocaleDateString();
     const entry = { id: Date.now(), date: displayDate, ...daily, stretches: STRETCHES.filter(s => stretchDone[s.key]).map(s => s.key) };
     const newD = [entry, ...dailyLog];
-    setDailyLog(newD); persist(history, newD, sleepLog);
+    setDailyLog(newD);
+    await saveEntry(entry);
     setDaily({ crunches: "", planks: "", pushups: "", steps: "" });
     setLogDate(todayStr());
     setStretchDone({});
@@ -379,7 +427,7 @@ function DailyTab({ dailyLog, setDailyLog, persist, history, sleepLog }) {
 }
 
 // ── SLEEP TAB ──────────────────────────────────────────────────────────────
-function SleepTab({ sleepLog, setSleepLog, persist, history, dailyLog }) {
+function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
   const [oura, setOura] = useState({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "" });
   const [saved, setSaved] = useState(false);
 
@@ -392,10 +440,11 @@ function SleepTab({ sleepLog, setSleepLog, persist, history, dailyLog }) {
     : null;
   const jhColor = jhSpread === null ? "#444" : jhSpread > 0 ? "#3a9e4f" : "#c0392b";
 
-  const saveSleep = () => {
+  const saveSleep = async () => {
     const entry = { id: Date.now(), date: new Date().toLocaleDateString(), ...oura, jhSpread };
     const newS = [entry, ...sleepLog];
-    setSleepLog(newS); persist(history, dailyLog, newS);
+    setSleepLog(newS);
+    await saveEntry(entry);
     setOura({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "" });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -523,16 +572,14 @@ function SleepTab({ sleepLog, setSleepLog, persist, history, dailyLog }) {
 }
 
 // ── HISTORY TAB ───────────────────────────────────────────────────────────
-function HistoryTab({ history, setHistory, dailyLog, setDailyLog, sleepLog, setSleepLog, persist }) {
+function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog, deleteDaily, sleepLog, setSleepLog, deleteSleep }) {
   const [search, setSearch] = useState("");
   const [view, setView] = useState("log"); // "log" | "progress"
   const [progressType, setProgressType] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const deleteWorkout = (id) => { const n = history.filter(h => h.id !== id); setHistory(n); persist(n, dailyLog, sleepLog); };
-  const deleteDaily = (id) => { const n = dailyLog.filter(d => d.id !== id); setDailyLog(n); persist(history, n, sleepLog); };
-  const deleteSleep = (id) => { const n = sleepLog.filter(s => s.id !== id); setSleepLog(n); persist(history, dailyLog, n); };
+
 
   const all = [
     ...history.map(h => ({ ...h, _kind: "workout" })),
@@ -728,18 +775,98 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
   );
 }
 
+// ── SUPABASE CLIENT ────────────────────────────────────────────────────────
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
+
+async function sbFetch(table, method, body = null, match = null) {
+  let url = `${SUPABASE_URL}/rest/v1/${table}`;
+  if (match) url += `?${new URLSearchParams(match)}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Prefer": method === "POST" ? "return=representation" : "return=minimal",
+    },
+    body: body ? JSON.stringify(body) : null,
+  });
+  if (method === "GET") return res.json();
+  return res;
+}
+
+// Generate or retrieve a stable user ID stored in localStorage
+function getUserId() {
+  let uid = localStorage.getItem("rep_uid");
+  if (!uid) { uid = "user_" + Math.random().toString(36).slice(2, 11); localStorage.setItem("rep_uid", uid); }
+  return uid;
+}
+
 // ── ROOT ───────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("workout");
+  const [loading, setLoading] = useState(true);
+  const userId = getUserId();
 
-  const [history, setHistory] = useState(() => { try { return JSON.parse(localStorage.getItem("rep_workoutHistory") || "[]"); } catch { return []; } });
-  const [dailyLog, setDailyLog] = useState(() => { try { return JSON.parse(localStorage.getItem("rep_dailyLog") || "[]"); } catch { return []; } });
-  const [sleepLog, setSleepLog] = useState(() => { try { return JSON.parse(localStorage.getItem("rep_sleepLog") || "[]"); } catch { return []; } });
+  const [history, setHistory] = useState([]);
+  const [dailyLog, setDailyLog] = useState([]);
+  const [sleepLog, setSleepLog] = useState([]);
 
-  const persist = (h, d, s) => {
-    localStorage.setItem("rep_workoutHistory", JSON.stringify(h));
-    localStorage.setItem("rep_dailyLog", JSON.stringify(d));
-    localStorage.setItem("rep_sleepLog", JSON.stringify(s));
+  // Load all data from Supabase on mount
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [w, d, s] = await Promise.all([
+          sbFetch("workouts", "GET", null, { user_id: `eq.${userId}`, order: "created_at.desc" }),
+          sbFetch("daily_logs", "GET", null, { user_id: `eq.${userId}`, order: "created_at.desc" }),
+          sbFetch("sleep_logs", "GET", null, { user_id: `eq.${userId}`, order: "created_at.desc" }),
+        ]);
+        setHistory(Array.isArray(w) ? w.map(r => r.data) : []);
+        setDailyLog(Array.isArray(d) ? d.map(r => r.data) : []);
+        setSleepLog(Array.isArray(s) ? s.map(r => r.data) : []);
+      } catch(e) {
+        console.error("Load error", e);
+      }
+      setLoading(false);
+    }
+    loadData();
+  }, []);
+
+  const persist = async (h, d, s) => {
+    // We persist individual entries — this is called after each save
+    // Individual saves handled in each tab's save function
+  };
+
+  const saveWorkoutEntry = async (entry) => {
+    await sbFetch("workouts", "POST", { user_id: userId, data: entry });
+  };
+
+  const saveDailyEntry = async (entry) => {
+    await sbFetch("daily_logs", "POST", { user_id: userId, data: entry });
+  };
+
+  const saveSleepEntry = async (entry) => {
+    await sbFetch("sleep_logs", "POST", { user_id: userId, data: entry });
+  };
+
+  const deleteWorkoutEntry = async (id) => {
+    const newH = history.filter(h => h.id !== id);
+    setHistory(newH);
+    // Delete by matching the id inside the data jsonb
+    await sbFetch("workouts", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
+  };
+
+  const deleteDailyEntry = async (id) => {
+    const newD = dailyLog.filter(d => d.id !== id);
+    setDailyLog(newD);
+    await sbFetch("daily_logs", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
+  };
+
+  const deleteSleepEntry = async (id) => {
+    const newS = sleepLog.filter(s => s.id !== id);
+    setSleepLog(newS);
+    await sbFetch("sleep_logs", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
   };
 
   const TABS = [
@@ -787,10 +914,19 @@ export default function App() {
         </div>
 
         {/* Content */}
-        {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} persist={persist} dailyLog={dailyLog} sleepLog={sleepLog} />}
-        {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} persist={persist} history={history} sleepLog={sleepLog} />}
-        {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} persist={persist} history={history} dailyLog={dailyLog} />}
-        {tab === "history" && <HistoryTab history={history} setHistory={setHistory} dailyLog={dailyLog} setDailyLog={setDailyLog} sleepLog={sleepLog} setSleepLog={setSleepLog} persist={persist} />}
+        {loading ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", flexDirection: "column", gap: 16 }}>
+            <div style={{ fontSize: 11, letterSpacing: 4, color: "#ff4d00", textTransform: "uppercase" }}>Loading…</div>
+            <div style={{ fontSize: 10, color: "#444", letterSpacing: 2 }}>Syncing your data</div>
+          </div>
+        ) : (
+          <>
+            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} sleepLog={sleepLog} />}
+            {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} history={history} sleepLog={sleepLog} />}
+            {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} history={history} dailyLog={dailyLog} />}
+            {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
+          </>
+        )}
       </div>
     </>
   );
