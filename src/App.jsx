@@ -96,6 +96,106 @@ function StretchTimer({ stretch, completed, onComplete }) {
   );
 }
 
+// ── VOICE DICTATION ────────────────────────────────────────────────────────
+function VoiceFill({ tab, onFill }) {
+  const [listening, setListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [status, setStatus] = useState(""); // "", "listening", "parsing", "done", "error"
+  const recRef = useRef(null);
+
+  const startListening = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setStatus("error"); setTranscript("Speech recognition not supported in this browser."); return; }
+    const rec = new SR();
+    rec.lang = "en-US";
+    rec.continuous = false;
+    rec.interimResults = false;
+    recRef.current = rec;
+    rec.onstart = () => { setListening(true); setStatus("listening"); setTranscript(""); };
+    rec.onresult = (e) => {
+      const text = e.results[0][0].transcript;
+      setTranscript(text);
+      parseWithClaude(text);
+    };
+    rec.onerror = () => { setListening(false); setStatus("error"); };
+    rec.onend = () => setListening(false);
+    rec.start();
+  };
+
+  const stopListening = () => {
+    recRef.current?.stop();
+    setListening(false);
+  };
+
+  const parseWithClaude = async (text) => {
+    setParsing(true);
+    setStatus("parsing");
+    const prompts = {
+      daily: `Extract daily fitness data from this voice note and return ONLY valid JSON with these optional fields:
+{"steps": number, "crunches": number, "planks": number, "pushups": number}
+Voice note: "${text}"
+Return only JSON, no explanation.`,
+      sleep: `Extract sleep/recovery data from this voice note and return ONLY valid JSON with these optional fields:
+{"sleepScore": number, "readiness": number, "hoursSlept": number, "rem": number, "heartRate": number, "hrv": number, "respiratoryRate": number}
+Voice note: "${text}"
+Return only JSON, no explanation.`,
+      workout: `Extract workout data from this voice note and return ONLY valid JSON:
+{"type": "chest|back|legs|shoulders|biceps|triceps|run", "exercises": [{"name": string, "sets": [{"reps": number, "weight": number}]}], "runData": {"distance": number, "duration": string, "pace": string, "heartRate": number}}
+For exercises, if uniform sets are mentioned (e.g. "4 sets 8 reps 225"), create that many identical set objects.
+Voice note: "${text}"
+Return only JSON, no explanation.`
+    };
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 500,
+          messages: [{ role: "user", content: prompts[tab] }]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content?.[0]?.text || "{}";
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      onFill(parsed);
+      setStatus("done");
+    } catch(e) {
+      setStatus("error");
+    }
+    setParsing(false);
+  };
+
+  const statusColors = { listening: "#ff4d00", parsing: "#c49a1a", done: "#3a9e4f", error: "#c0392b" };
+  const statusLabels = { listening: "● LISTENING…", parsing: "⟳ PARSING…", done: "✓ FIELDS FILLED", error: "✕ TRY AGAIN" };
+
+  return (
+    <div style={{ ...g.card, padding: "12px 14px", marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <button
+          onClick={listening ? stopListening : startListening}
+          style={{
+            width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
+            background: listening ? "#ff4d00" : "#1a1a1a",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            boxShadow: listening ? "0 0 0 6px rgba(255,77,0,0.15)" : "none",
+            transition: "all 0.3s"
+          }}>
+          <span style={{ fontSize: 20 }}>{listening ? "⏹" : "🎙️"}</span>
+        </button>
+        <div style={{ flex: 1 }}>
+          {!status && <span style={{ fontSize: 9, letterSpacing: 3, color: "#555", textTransform: "uppercase" }}>Tap to dictate</span>}
+          {status && <span style={{ fontSize: 9, letterSpacing: 2, color: statusColors[status], textTransform: "uppercase" }}>{statusLabels[status]}</span>}
+          {transcript && <div style={{ fontSize: 10, color: "#666", marginTop: 4, lineHeight: 1.5 }}>"{transcript}"</div>}
+        </div>
+        {status && <button onClick={() => { setStatus(""); setTranscript(""); }} style={{ ...g.ghost, fontSize: 9, padding: "4px 8px" }}>✕</button>}
+      </div>
+    </div>
+  );
+}
+
 // ── WORKOUT TAB ────────────────────────────────────────────────────────────
 function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sleepLog }) {
   const [mode, setMode] = useState("pick"); // pick | log
@@ -196,6 +296,15 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
             <div style={{ width: 60 }}><Bar value={totalSets} max={20} /></div>
           </div>
         </div>
+
+        <VoiceFill tab="workout" onFill={(parsed) => {
+          if (parsed.exercises?.length) {
+            setExercises(parsed.exercises.map(e => ({
+              name: e.name || "",
+              sets: e.sets?.length ? e.sets.map(s => ({ reps: String(s.reps || ""), weight: String(s.weight || "") })) : [{ reps: "", weight: "" }]
+            })));
+          }
+        }} />
 
         {exercises.map((ex, i) => (
           <div key={i} style={g.card}>
@@ -360,6 +469,16 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
         />
       </div>
 
+      {/* Voice */}
+      <VoiceFill tab="daily" onFill={(parsed) => {
+        setDaily(prev => ({
+          crunches: parsed.crunches !== undefined ? String(parsed.crunches) : prev.crunches,
+          planks: parsed.planks !== undefined ? String(parsed.planks) : prev.planks,
+          pushups: parsed.pushups !== undefined ? String(parsed.pushups) : prev.pushups,
+          steps: parsed.steps !== undefined ? String(parsed.steps) : prev.steps,
+        }));
+      }} />
+
       {/* Steps */}
       <span style={g.label}>Steps</span>
       <div style={{ ...g.card, padding: "16px 14px", marginBottom: 10 }}>
@@ -453,6 +572,19 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
   return (
     <div style={g.page}>
       <span style={g.label}>Oura Sleep</span>
+
+      {/* Voice */}
+      <VoiceFill tab="sleep" onFill={(parsed) => {
+        setOura(prev => ({
+          sleepScore: parsed.sleepScore !== undefined ? String(parsed.sleepScore) : prev.sleepScore,
+          readiness: parsed.readiness !== undefined ? String(parsed.readiness) : prev.readiness,
+          hoursSlept: parsed.hoursSlept !== undefined ? String(parsed.hoursSlept) : prev.hoursSlept,
+          rem: parsed.rem !== undefined ? String(parsed.rem) : prev.rem,
+          heartRate: parsed.heartRate !== undefined ? String(parsed.heartRate) : prev.heartRate,
+          hrv: parsed.hrv !== undefined ? String(parsed.hrv) : prev.hrv,
+          respiratoryRate: parsed.respiratoryRate !== undefined ? String(parsed.respiratoryRate) : prev.respiratoryRate,
+        }));
+      }} />
 
       {/* Dual score hero — Sleep + Readiness */}
       <div style={{ ...g.card, background: "#0f0f0f" }}>
