@@ -196,6 +196,55 @@ Return only JSON, no explanation.`
   );
 }
 
+// ── QUICK FILL BAR ─────────────────────────────────────────────────────────
+function QuickFillBar({ onApply }) {
+  const [sets, setSets] = useState("");
+  const [reps, setReps] = useState("");
+  const [weight, setWeight] = useState("");
+  const [applied, setApplied] = useState(false);
+
+  const apply = () => {
+    const n = Math.max(1, parseInt(sets) || 1);
+    onApply(n, reps, weight);
+    setApplied(true);
+    setSets(""); setReps(""); setWeight("");
+    setTimeout(() => setApplied(false), 2000);
+  };
+
+  return (
+    <div style={{ background: "#0e0e0e", border: "1px solid #1a1a1a", borderRadius: 6, padding: "10px 10px", marginBottom: 12 }}>
+      <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase", marginBottom: 8 }}>Quick Fill</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 6, alignItems: "flex-end" }}>
+        <div>
+          <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Sets</div>
+          <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="4" min="1" max="20"
+            value={sets} onChange={e => { setSets(e.target.value); setApplied(false); }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Reps</div>
+          <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="8"
+            value={reps} onChange={e => { setReps(e.target.value); setApplied(false); }} />
+        </div>
+        <div>
+          <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Lbs</div>
+          <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="135"
+            value={weight} onChange={e => { setWeight(e.target.value); setApplied(false); }} />
+        </div>
+        <button onClick={apply} style={{
+          background: applied ? "#0b180b" : "#ff4d00",
+          border: applied ? "1px solid #1a4020" : "none",
+          color: applied ? "#3a9e4f" : "#fff",
+          padding: "0 10px", borderRadius: 5, cursor: "pointer",
+          fontFamily: "'DM Mono', monospace", fontSize: 9,
+          height: 36, whiteSpace: "nowrap", transition: "all 0.2s"
+        }}>
+          {applied ? "✓" : "FILL"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── WORKOUT TAB ────────────────────────────────────────────────────────────
 function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sleepLog }) {
   const [mode, setMode] = useState("pick"); // pick | log
@@ -218,15 +267,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
   const removeExercise = (i) => setExercises(exercises.filter((_, idx) => idx !== i));
   const replaceWithAlt = (i, name) => { const u = [...exercises]; u[i].name = name; setExercises(u); setShowAlts(null); };
 
-  const [quickFill, setQuickFill] = useState({});
-  const applyQuickFill = (i) => {
-    const qf = quickFill[i] || {};
-    const numSets = parseInt(qf.sets) || 1;
-    const u = [...exercises];
-    u[i].sets = Array.from({ length: numSets }, () => ({ reps: qf.reps || "", weight: qf.weight || "" }));
-    setExercises(u);
-    setQuickFill(prev => ({ ...prev, [i]: { ...prev[i], applied: true } }));
-  };
+
 
   const saveWorkout = async () => {
     const entry = { id: Date.now(), date: new Date().toLocaleDateString(), type: workoutType, ...(workoutType === "run" ? { runData } : { exercises }) };
@@ -240,7 +281,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
     await deleteEntry(id);
   };
 
-  const totalSets = exercises.reduce((a, e) => a + e.sets.filter(s => (s.reps !== "" && s.reps !== undefined) || (s.weight !== "" && s.weight !== undefined)).length, 0);
+  const totalSets = exercises.reduce((a, e) => a + e.sets.filter(s => s.reps || s.weight).length, 0);
   const lastRun = history.find(h => h.type === "run");
 
   if (mode === "pick") return (
@@ -325,55 +366,32 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
             )}
 
             <div style={{ padding: "11px 14px" }}>
-              {/* Quick fill row */}
-              <div style={{ background: "#0e0e0e", border: "1px solid #1a1a1a", borderRadius: 6, padding: "10px 10px", marginBottom: 12 }}>
-                <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase", marginBottom: 8 }}>Quick Fill</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 6, alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontSize: 7, color: "#444", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Sets</div>
-                    <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="4" min="1" max="20"
-                      value={quickFill[i]?.sets || ""}
-                      onChange={e => setQuickFill(prev => ({ ...prev, [i]: { ...prev[i], sets: e.target.value, applied: false } }))} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 7, color: "#444", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Reps</div>
-                    <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="8"
-                      value={quickFill[i]?.reps || ""}
-                      onChange={e => setQuickFill(prev => ({ ...prev, [i]: { ...prev[i], reps: e.target.value, applied: false } }))} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 7, color: "#444", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Lbs</div>
-                    <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="135"
-                      value={quickFill[i]?.weight || ""}
-                      onChange={e => setQuickFill(prev => ({ ...prev, [i]: { ...prev[i], weight: e.target.value, applied: false } }))} />
-                  </div>
-                  <button onClick={() => applyQuickFill(i)} style={{
-                    background: quickFill[i]?.applied ? "#0b180b" : "#ff4d00",
-                    border: quickFill[i]?.applied ? "1px solid #1a4020" : "none",
-                    color: quickFill[i]?.applied ? "#3a9e4f" : "#fff",
-                    padding: "0 10px", borderRadius: 5, cursor: "pointer",
-                    fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1,
-                    height: 36, marginTop: 15, whiteSpace: "nowrap", transition: "all 0.2s"
-                  }}>
-                    {quickFill[i]?.applied ? "✓" : "FILL"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Individual sets */}
-              <div style={{ display: "grid", gridTemplateColumns: "22px 1fr 1fr", gap: 8, marginBottom: 7 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "22px 1fr 1fr 24px", gap: 8, marginBottom: 7 }}>
                 <span />
                 <span style={{ fontSize: 8, letterSpacing: 3, color: "#777", textTransform: "uppercase" }}>REPS</span>
                 <span style={{ fontSize: 8, letterSpacing: 3, color: "#777", textTransform: "uppercase" }}>LBS</span>
+                <span />
               </div>
-              {ex.sets.map((set, j) => (
-                <div key={j} style={{ display: "grid", gridTemplateColumns: "22px 1fr 1fr", gap: 8, marginBottom: 7 }}>
-                  <span style={{ fontSize: 9, color: "#777", textAlign: "center", paddingTop: 10 }}>{j + 1}</span>
-                  <input style={g.numInput} type="number" placeholder="—" value={set.reps} onChange={e => updateSet(i, j, "reps", e.target.value)} />
-                  <input style={g.numInput} type="number" placeholder="—" value={set.weight} onChange={e => updateSet(i, j, "weight", e.target.value)} />
-                </div>
-              ))}
-              <button style={{ ...g.ghost, fontSize: 9, marginTop: 2 }} onClick={() => addSet(i)}>+ SET</button>
+              {ex.sets.map((set, j) => {
+                const counted = !!(set.reps || set.weight);
+                return (
+                  <div key={j} style={{ display: "grid", gridTemplateColumns: "22px 1fr 1fr 24px", gap: 8, marginBottom: 7, alignItems: "center" }}>
+                    <span style={{ fontSize: 9, color: counted ? "#3a9e4f" : "#555", textAlign: "center", fontWeight: counted ? 700 : 400 }}>{j + 1}</span>
+                    <input style={{ ...g.numInput, borderColor: counted ? "#1a3a1a" : "#252525" }} type="number" placeholder="—" value={set.reps} onChange={e => updateSet(i, j, "reps", e.target.value)} />
+                    <input style={{ ...g.numInput, borderColor: counted ? "#1a3a1a" : "#252525" }} type="number" placeholder="—" value={set.weight} onChange={e => updateSet(i, j, "weight", e.target.value)} />
+                    <span style={{ fontSize: 14, color: counted ? "#3a9e4f" : "transparent", textAlign: "center", transition: "color 0.2s" }}>✓</span>
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <button style={{ ...g.ghost, fontSize: 9 }} onClick={() => addSet(i)}>+ SET</button>
+                {ex.sets.length > 1 && (
+                  <button style={{ ...g.ghost, fontSize: 9, color: "#444" }} onClick={() => {
+                    const u = exercises.map((ex2, idx) => idx === i ? { ...ex2, sets: ex2.sets.slice(0, -1) } : ex2);
+                    setExercises(u);
+                  }}>− SET</button>
+                )}
+              </div>
             </div>
           </div>
         ))}
