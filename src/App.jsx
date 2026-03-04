@@ -949,7 +949,10 @@ async function sbFetch(table, method, body = null, match = null) {
 // Generate or retrieve a stable user ID stored in localStorage
 function getUserId() {
   let uid = localStorage.getItem("rep_uid");
-  if (!uid) { uid = "user_" + Math.random().toString(36).slice(2, 11); localStorage.setItem("rep_uid", uid); }
+  if (!uid) {
+    uid = "user_" + Math.random().toString(36).slice(2, 11);
+    localStorage.setItem("rep_uid", uid);
+  }
   return uid;
 }
 
@@ -967,14 +970,43 @@ export default function App() {
   useEffect(() => {
     async function loadData() {
       try {
+        let uid = userId;
+        // Try loading with current ID first
         const [w, d, s] = await Promise.all([
-          sbFetch("workouts", "GET", null, { user_id: `eq.${userId}`, order: "created_at.desc" }),
-          sbFetch("daily_logs", "GET", null, { user_id: `eq.${userId}`, order: "created_at.desc" }),
-          sbFetch("sleep_logs", "GET", null, { user_id: `eq.${userId}`, order: "created_at.desc" }),
+          sbFetch("workouts", "GET", null, { user_id: `eq.${uid}`, order: "created_at.desc" }),
+          sbFetch("daily_logs", "GET", null, { user_id: `eq.${uid}`, order: "created_at.desc" }),
+          sbFetch("sleep_logs", "GET", null, { user_id: `eq.${uid}`, order: "created_at.desc" }),
         ]);
-        setHistory(Array.isArray(w) ? w.map(r => r.data) : []);
-        setDailyLog(Array.isArray(d) ? d.map(r => r.data) : []);
-        setSleepLog(Array.isArray(s) ? s.map(r => r.data) : []);
+        const workouts = Array.isArray(w) ? w : [];
+        const daily = Array.isArray(d) ? d : [];
+        const sleep = Array.isArray(s) ? s : [];
+
+        // If no data found, try to find any existing user data in Supabase
+        if (workouts.length === 0 && daily.length === 0 && sleep.length === 0) {
+          // Fetch recent sleep logs without user filter to find the real user ID
+          const allSleep = await sbFetch("sleep_logs", "GET", null, { order: "created_at.desc", limit: "1" });
+          if (Array.isArray(allSleep) && allSleep.length > 0) {
+            const realUid = allSleep[0].user_id;
+            if (realUid && realUid !== uid) {
+              // Found a different user ID — use it and save it
+              localStorage.setItem("rep_uid", realUid);
+              const [w2, d2, s2] = await Promise.all([
+                sbFetch("workouts", "GET", null, { user_id: `eq.${realUid}`, order: "created_at.desc" }),
+                sbFetch("daily_logs", "GET", null, { user_id: `eq.${realUid}`, order: "created_at.desc" }),
+                sbFetch("sleep_logs", "GET", null, { user_id: `eq.${realUid}`, order: "created_at.desc" }),
+              ]);
+              setHistory(Array.isArray(w2) ? w2.map(r => r.data) : []);
+              setDailyLog(Array.isArray(d2) ? d2.map(r => r.data) : []);
+              setSleepLog(Array.isArray(s2) ? s2.map(r => r.data) : []);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+
+        setHistory(workouts.map(r => r.data));
+        setDailyLog(daily.map(r => r.data));
+        setSleepLog(sleep.map(r => r.data));
       } catch(e) {
         console.error("Load error", e);
       }
