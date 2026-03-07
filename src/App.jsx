@@ -218,19 +218,22 @@ function QuickFillBar({ onApply }) {
         <div>
           <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Sets</div>
           <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="4" min="1" max="20"
-            value={sets} onChange={e => { setSets(e.target.value); setApplied(false); }} />
+            value={sets} onChange={e => { setSets(e.target.value); setApplied(false); }}
+            onBlur={e => setSets(e.target.value)} />
         </div>
         <div>
           <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Reps</div>
           <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="8"
-            value={reps} onChange={e => { setReps(e.target.value); setApplied(false); }} />
+            value={reps} onChange={e => { setReps(e.target.value); setApplied(false); }}
+            onBlur={e => setReps(e.target.value)} />
         </div>
         <div>
           <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Lbs</div>
           <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="135"
-            value={weight} onChange={e => { setWeight(e.target.value); setApplied(false); }} />
+            value={weight} onChange={e => { setWeight(e.target.value); setApplied(false); }}
+            onBlur={e => setWeight(e.target.value)} />
         </div>
-        <button onClick={apply} style={{
+        <button onPointerDown={e => e.preventDefault()} onClick={apply} style={{
           background: applied ? "#0b180b" : "#ff4d00",
           border: applied ? "1px solid #1a4020" : "none",
           color: applied ? "#3a9e4f" : "#fff",
@@ -253,12 +256,55 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
   const [runData, setRunData] = useState({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "" });
   const [showAlts, setShowAlts] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [draftId] = useState(() => "draft_" + Date.now());
+  const autoSaveTimer = useRef(null);
+
+  // Auto-save draft to localStorage whenever exercises change
+  useEffect(() => {
+    if (mode !== "log" || !workoutType || workoutType === "run") return;
+    clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      const draft = { workoutType, exercises, savedAt: new Date().toISOString() };
+      localStorage.setItem("rep_draft", JSON.stringify(draft));
+    }, 800);
+  }, [exercises, mode, workoutType]);
+
+  // Restore draft on mount if one exists
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState(null);
+  useEffect(() => {
+    const raw = localStorage.getItem("rep_draft");
+    if (raw) {
+      try {
+        const draft = JSON.parse(raw);
+        if (draft.exercises?.length > 0) {
+          setPendingDraft(draft);
+          setShowDraftBanner(true);
+        }
+      } catch(e) {}
+    }
+  }, []);
+
+  const restoreDraft = () => {
+    if (!pendingDraft) return;
+    setWorkoutType(pendingDraft.workoutType);
+    setExercises(pendingDraft.exercises);
+    setMode("log");
+    setShowDraftBanner(false);
+  };
+
+  const discardDraft = () => {
+    localStorage.removeItem("rep_draft");
+    setShowDraftBanner(false);
+    setPendingDraft(null);
+  };
 
   const startWorkout = (type) => {
     setWorkoutType(type);
     if (type !== "run") setExercises(EXERCISE_DB[type].staples.map(n => ({ name: n, sets: [{ reps: "", weight: "" }] })));
     else setRunData({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "" });
     setMode("log"); setSaved(false);
+    localStorage.removeItem("rep_draft");
   };
 
   const addSet = (i) => { const u = [...exercises]; u[i].sets.push({ reps: "", weight: "" }); setExercises(u); };
@@ -274,6 +320,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
     const newH = [entry, ...history];
     setHistory(newH);
     await saveEntry(entry);
+    localStorage.removeItem("rep_draft");
     setSaved(true);
   };
 
@@ -309,6 +356,18 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
 
   if (mode === "pick") return (
     <div style={g.page}>
+      {showDraftBanner && pendingDraft && (
+        <div style={{ background: "#0d1f0d", border: "1px solid #1a4020", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
+          <div style={{ fontSize: 9, letterSpacing: 2, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 6 }}>◉ Unsaved Workout Found</div>
+          <div style={{ fontSize: 11, color: "#888", marginBottom: 10 }}>
+            {pendingDraft.workoutType} · {pendingDraft.exercises?.reduce((a, e) => a + e.sets.filter(s => s.reps || s.weight).length, 0)} sets logged · {new Date(pendingDraft.savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={restoreDraft} style={{ ...g.primary, flex: 2, padding: "9px 0", fontSize: 9 }}>↺ RESTORE</button>
+            <button onClick={discardDraft} style={{ ...g.ghost, flex: 1, padding: "9px 0", fontSize: 9, color: "#555" }}>DISCARD</button>
+          </div>
+        </div>
+      )}
       <span style={g.label}>Choose Workout</span>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 28 }}>
         {WORKOUT_TYPES.map(t => (
@@ -358,6 +417,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 11, color: totalSets >= 20 ? "#ff4d00" : "#fff", letterSpacing: 2, fontWeight: 700 }}>{totalSets}/20</span>
             <div style={{ width: 60 }}><Bar value={totalSets} max={20} /></div>
+            <span style={{ fontSize: 7, color: "#2a4a2a", letterSpacing: 1 }}>● AUTO</span>
           </div>
         </div>
 
@@ -684,17 +744,29 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
         {/* Metrics grid — 3 columns */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 1, background: "#1a1a1a" }}>
           {[
-            ["hoursSlept", "Sleep",    "hrs",  "◑", "0.1"],
-            ["rem",        "REM",      "hrs",  "◎", "0.1"],
-            ["heartRate",  "Resting HR","bpm", "♡", "1"],
-            ["hrv",        "HRV",      "ms",   "∿", "1"],
-            ["respiratoryRate","Resp.", "brpm", "≋", "0.1"],
-          ].map(([field, label, unit, icon, step]) => (
+            ["hoursSlept", "Sleep",    "hrs",  "◑", "time"],
+            ["rem",        "REM",      "hrs",  "◎", "time"],
+            ["heartRate",  "Resting HR","bpm", "♡", "number"],
+            ["hrv",        "HRV",      "ms",   "∿", "number"],
+            ["respiratoryRate","Resp.", "brpm", "≋", "number"],
+          ].map(([field, label, unit, icon, inputType]) => (
             <div key={field} style={{ background: "#0f0f0f", padding: "12px 10px" }}>
               <div style={{ fontSize: 8, letterSpacing: 2, color: "#777", textTransform: "uppercase", marginBottom: 6, textAlign: "center" }}>{icon} {label}</div>
-              <input style={{ ...g.numInput, fontSize: 16, fontWeight: 700, padding: "8px 4px" }}
-                type="number" step={step} placeholder="—"
-                value={oura[field]} onChange={e => setOura(o => ({ ...o, [field]: e.target.value }))} />
+              {inputType === "time" ? (
+                <input style={{ ...g.numInput, fontSize: 16, fontWeight: 700, padding: "8px 4px", textAlign: "center" }}
+                  type="text" placeholder="6:12" maxLength={5}
+                  value={oura[field]}
+                  onChange={e => {
+                    let v = e.target.value.replace(/[^0-9:]/g, "");
+                    // Auto-insert colon after first 1-2 digits
+                    if (v.length === 2 && !v.includes(":") && oura[field].length < 2) v = v + ":";
+                    setOura(o => ({ ...o, [field]: v }));
+                  }} />
+              ) : (
+                <input style={{ ...g.numInput, fontSize: 16, fontWeight: 700, padding: "8px 4px" }}
+                  type="number" step="1" placeholder="—"
+                  value={oura[field]} onChange={e => setOura(o => ({ ...o, [field]: e.target.value }))} />
+              )}
               <div style={{ fontSize: 7, color: "#555", textAlign: "center", marginTop: 4 }}>{unit}</div>
             </div>
           ))}
