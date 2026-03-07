@@ -403,10 +403,10 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
                 const currentVol = ex.sets.filter(s => s.reps || s.weight).reduce((a, s) => a + ((parseFloat(s.weight)||0) * (parseFloat(s.reps)||0)), 0);
                 const improved = currentVol > 0 && currentVol > last.totalVol;
                 return (
-                  <div style={{ marginBottom: 10, padding: "7px 10px", background: "#0a0a0a", borderRadius: 5, border: "1px solid #1a1a1a", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 9, color: "#444", letterSpacing: 1 }}>
+                  <div style={{ marginBottom: 10, padding: "7px 10px", background: "#07101a", borderRadius: 5, border: "1px solid #0d2a3d", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 9, color: "#3a8fc4", letterSpacing: 1 }}>
                       LAST · {last.sets}×{last.reps} @ {last.weight} lbs
-                      <span style={{ color: "#333", marginLeft: 6 }}>{last.date}</span>
+                      <span style={{ color: "#1e5a7a", marginLeft: 6 }}>{last.date}</span>
                     </span>
                     {improved && <span style={{ fontSize: 11, color: "#3a9e4f", fontWeight: 700 }}>↑</span>}
                   </div>
@@ -767,6 +767,181 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
   );
 }
 
+// ── CONSISTENCY HEATMAP ───────────────────────────────────────────────────
+function ConsistencyHeatmap({ history, dailyLog, sleepLog }) {
+  // Build a map of date -> activity types
+  const today = new Date();
+  const activityMap = {};
+
+  history.forEach(h => {
+    if (h.date) {
+      if (!activityMap[h.date]) activityMap[h.date] = { workout: false, daily: false, sleep: false, workoutType: null };
+      activityMap[h.date].workout = true;
+      activityMap[h.date].workoutType = h.type;
+    }
+  });
+  dailyLog.forEach(d => {
+    if (d.date) {
+      if (!activityMap[d.date]) activityMap[d.date] = { workout: false, daily: false, sleep: false };
+      activityMap[d.date].daily = true;
+    }
+  });
+  sleepLog.forEach(s => {
+    if (s.date) {
+      if (!activityMap[s.date]) activityMap[s.date] = { workout: false, daily: false, sleep: false };
+      activityMap[s.date].sleep = true;
+    }
+  });
+
+  // Build 365 days ending today
+  const days = [];
+  for (let i = 364; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const dateStr = d.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
+    // Also try M/D/YYYY format used by the app
+    const appDateStr = d.toLocaleDateString();
+    days.push({ date: appDateStr, dow: d.getDay(), weekNum: Math.floor((364 - i) / 7) });
+  }
+
+  const getCellColor = (dateStr) => {
+    const a = activityMap[dateStr];
+    if (!a) return "#111";
+    if (a.workout && a.daily && a.sleep) return "#ff4d00"; // full day - orange
+    if (a.workout) return "#c03a00"; // workout only - dark orange
+    if (a.daily && a.sleep) return "#1a4a6e"; // daily + sleep - blue
+    if (a.daily) return "#0d2a3d"; // daily only
+    if (a.sleep) return "#1a3a5c"; // sleep only
+    return "#111";
+  };
+
+  // Group into weeks (columns)
+  const weeks = [];
+  for (let w = 0; w < 53; w++) {
+    weeks.push(days.filter(d => d.weekNum === w));
+  }
+
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const dowLabels = ["S","M","T","W","T","F","S"];
+
+  // Stats
+  const totalWorkouts = history.length;
+  const totalDays = Object.keys(activityMap).length;
+  const streak = (() => {
+    let s = 0;
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const ds = d.toLocaleDateString();
+      if (activityMap[ds]) s++;
+      else if (i > 0) break;
+    }
+    return s;
+  })();
+
+  const workoutTypeCounts = WORKOUT_TYPES.reduce((acc, t) => {
+    acc[t] = history.filter(h => h.type === t).length;
+    return acc;
+  }, {});
+
+  return (
+    <div>
+      {/* Stats row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+        {[
+          ["WORKOUTS", totalWorkouts, "sessions"],
+          ["ACTIVE DAYS", totalDays, "logged"],
+          ["STREAK", streak, "days"],
+        ].map(([label, val, sub]) => (
+          <div key={label} style={{ ...g.card, padding: "12px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#ff4d00", fontFamily: "'DM Mono', monospace" }}>{val}</div>
+            <div style={{ fontSize: 7, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginTop: 3 }}>{label}</div>
+            <div style={{ fontSize: 7, color: "#333", marginTop: 2 }}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Heatmap grid */}
+      <div style={{ ...g.card, padding: "14px 10px", overflowX: "auto" }}>
+        <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase", marginBottom: 10 }}>365-Day Consistency</div>
+        <div style={{ display: "flex", gap: 2 }}>
+          {/* Day labels */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginRight: 4, paddingTop: 14 }}>
+            {dowLabels.map((d, i) => (
+              <div key={i} style={{ fontSize: 7, color: "#333", height: 10, lineHeight: "10px", textAlign: "right" }}>{i % 2 === 0 ? d : ""}</div>
+            ))}
+          </div>
+          {/* Week columns */}
+          <div style={{ display: "flex", gap: 2, overflowX: "auto" }}>
+            {weeks.filter(w => w.length > 0).map((week, wi) => (
+              <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {/* Month label on first day of month */}
+                <div style={{ fontSize: 6, color: "#333", height: 10, lineHeight: "10px", textAlign: "center", minWidth: 10 }}>
+                  {week[0] && new Date(week[0].date).getDate() <= 7 ? months[new Date(week[0].date).getMonth()] : ""}
+                </div>
+                {/* Fill empty days at start of week */}
+                {Array.from({ length: week[0]?.dow || 0 }).map((_, pi) => (
+                  <div key={`p${pi}`} style={{ width: 10, height: 10 }} />
+                ))}
+                {week.map((day, di) => {
+                  const a = activityMap[day.date];
+                  const color = getCellColor(day.date);
+                  const isToday = day.date === today.toLocaleDateString();
+                  return (
+                    <div key={di} title={`${day.date}${a ? ` · ${[a.workout && a.workoutType, a.daily && "daily", a.sleep && "sleep"].filter(Boolean).join(", ")}` : ""}`}
+                      style={{
+                        width: 10, height: 10, borderRadius: 2,
+                        background: color,
+                        border: isToday ? "1px solid #ff4d00" : "1px solid transparent",
+                        transition: "transform 0.1s",
+                        cursor: a ? "pointer" : "default"
+                      }} />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
+          {[
+            ["#111", "None"],
+            ["#0d2a3d", "Daily"],
+            ["#c03a00", "Workout"],
+            ["#ff4d00", "Full Day"],
+          ].map(([color, label]) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <div style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
+              <span style={{ fontSize: 7, color: "#444", letterSpacing: 1 }}>{label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Workout breakdown */}
+      <div style={{ ...g.card, padding: "14px", marginTop: 10 }}>
+        <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase", marginBottom: 10 }}>By Type</div>
+        {WORKOUT_TYPES.map(t => {
+          const count = workoutTypeCounts[t] || 0;
+          const max = Math.max(...Object.values(workoutTypeCounts), 1);
+          return (
+            <div key={t} style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                <span style={{ fontSize: 9, color: "#777", letterSpacing: 1 }}>{ICON[t]} {t}</span>
+                <span style={{ fontSize: 9, color: "#555" }}>{count}</span>
+              </div>
+              <div style={{ height: 3, background: "#1a1a1a", borderRadius: 2 }}>
+                <div style={{ height: "100%", width: `${(count / max) * 100}%`, background: "#ff4d00", borderRadius: 2, transition: "width 0.5s" }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── HISTORY TAB ───────────────────────────────────────────────────────────
 function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog, deleteDaily, sleepLog, setSleepLog, deleteSleep }) {
   const [search, setSearch] = useState("");
@@ -854,8 +1029,15 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
     <div style={g.page}>
       {/* View toggle */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <button onClick={() => setView("log")} style={{ flex: 1, padding: "11px 0", borderRadius: 8, cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 3, textTransform: "uppercase", border: `1px solid ${view === "log" ? "#ff4d00" : "#2a2a2a"}`, background: view === "log" ? "#ff4d00" : "#141414", color: view === "log" ? "#fff" : "#777", fontWeight: view === "log" ? 700 : 400 }}>LOG</button>
-        <button onClick={() => setView("progress")} style={{ flex: 1, padding: "11px 0", borderRadius: 8, cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 3, textTransform: "uppercase", border: `1px solid ${view === "progress" ? "#ff4d00" : "#2a2a2a"}`, background: view === "progress" ? "#ff4d00" : "#141414", color: view === "progress" ? "#fff" : "#777", fontWeight: view === "progress" ? 700 : 400 }}>PROGRESS ✦</button>
+        {["log", "progress", "heatmap"].map(v => (
+          <button key={v} onClick={() => setView(v)} style={{
+            flex: 1, padding: "11px 0", borderRadius: 8, cursor: "pointer",
+            fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, textTransform: "uppercase",
+            border: `1px solid ${view === v ? "#ff4d00" : "#2a2a2a"}`,
+            background: view === v ? "#ff4d00" : "#141414",
+            color: view === v ? "#fff" : "#777", fontWeight: view === v ? 700 : 400
+          }}>{v === "progress" ? "PROGRESS ✦" : v === "heatmap" ? "HEATMAP ◈" : "LOG"}</button>
+        ))}
       </div>
 
       {/* PROGRESS VIEW */}
@@ -901,6 +1083,11 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
             </div>
           )}
         </div>
+      )}
+
+      {/* HEATMAP VIEW */}
+      {view === "heatmap" && (
+        <ConsistencyHeatmap history={history} dailyLog={dailyLog} sleepLog={sleepLog} />
       )}
 
       {/* LOG VIEW */}
