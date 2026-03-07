@@ -282,6 +282,29 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
   };
 
   const totalSets = exercises.reduce((a, e) => a + e.sets.filter(s => s.reps || s.weight).length, 0);
+
+  // Find last time each exercise was performed
+  const getLastPerformance = (exName) => {
+    if (!exName) return null;
+    const name = exName.trim().toLowerCase();
+    for (const session of history) {
+      if (!session.exercises) continue;
+      const match = session.exercises.find(e => e.name?.trim().toLowerCase() === name);
+      if (match && match.sets?.length) {
+        // Find best set (highest weight with reps)
+        const filledSets = match.sets.filter(s => s.reps || s.weight);
+        if (!filledSets.length) continue;
+        const best = filledSets.reduce((a, b) => {
+          const wa = parseFloat(a.weight) || 0, wb = parseFloat(b.weight) || 0;
+          const ra = parseFloat(a.reps) || 0, rb = parseFloat(b.reps) || 0;
+          return (wb * rb) >= (wa * ra) ? b : a;
+        });
+        const totalVol = filledSets.reduce((a, s) => a + ((parseFloat(s.weight)||0) * (parseFloat(s.reps)||0)), 0);
+        return { weight: best.weight, reps: best.reps, sets: filledSets.length, totalVol, date: session.date };
+      }
+    }
+    return null;
+  };
   const lastRun = history.find(h => h.type === "run");
 
   if (mode === "pick") return (
@@ -366,6 +389,21 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
             )}
 
             <div style={{ padding: "11px 14px" }}>
+              {(() => {
+                const last = getLastPerformance(ex.name);
+                if (!last) return null;
+                const currentVol = ex.sets.filter(s => s.reps || s.weight).reduce((a, s) => a + ((parseFloat(s.weight)||0) * (parseFloat(s.reps)||0)), 0);
+                const improved = currentVol > 0 && currentVol > last.totalVol;
+                return (
+                  <div style={{ marginBottom: 10, padding: "7px 10px", background: "#0a0a0a", borderRadius: 5, border: "1px solid #1a1a1a", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 9, color: "#444", letterSpacing: 1 }}>
+                      LAST · {last.sets}×{last.reps} @ {last.weight} lbs
+                      <span style={{ color: "#333", marginLeft: 6 }}>{last.date}</span>
+                    </span>
+                    {improved && <span style={{ fontSize: 11, color: "#3a9e4f", fontWeight: 700 }}>↑</span>}
+                  </div>
+                );
+              })()}
               <div style={{ display: "grid", gridTemplateColumns: "22px 1fr 1fr 24px", gap: 8, marginBottom: 7 }}>
                 <span />
                 <span style={{ fontSize: 8, letterSpacing: 3, color: "#777", textTransform: "uppercase" }}>REPS</span>
