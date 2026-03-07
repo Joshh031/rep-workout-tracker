@@ -389,6 +389,14 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
             )}
 
             <div style={{ padding: "11px 14px" }}>
+              <QuickFillBar onApply={(numSets, reps, weight) => {
+                const addedSets = Array.from({ length: numSets }, () => ({ reps, weight }));
+                setExercises(prev => prev.map((ex2, idx2) => {
+                  if (idx2 !== i) return ex2;
+                  const existingFilled = ex2.sets.filter(s => s.reps || s.weight);
+                  return { ...ex2, sets: [...existingFilled, ...addedSets] };
+                }));
+              }} />
               {(() => {
                 const last = getLastPerformance(ex.name);
                 if (!last) return null;
