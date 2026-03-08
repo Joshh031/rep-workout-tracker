@@ -151,7 +151,7 @@ Return only JSON, no explanation.`
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 500,
@@ -1133,7 +1133,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 1000,
@@ -1282,6 +1282,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
 }
 
 // ── SUPABASE CLIENT ────────────────────────────────────────────────────────
+const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
