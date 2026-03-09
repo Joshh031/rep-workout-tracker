@@ -142,11 +142,16 @@ Return only JSON, no explanation.`,
 {"sleepScore": number, "readiness": number, "hoursSlept": number, "rem": number, "heartRate": number, "hrv": number, "respiratoryRate": number}
 Voice note: "${text}"
 Return only JSON, no explanation.`,
-      workout: `Extract workout data from this voice note and return ONLY valid JSON:
-{"type": "chest|back|legs|shoulders|biceps|triceps|run", "exercises": [{"name": string, "sets": [{"reps": number, "weight": number}]}], "runData": {"distance": number, "duration": string, "pace": string, "heartRate": number}}
-For exercises, if uniform sets are mentioned (e.g. "4 sets 8 reps 225"), create that many identical set objects.
-Voice note: "${text}"
-Return only JSON, no explanation.`
+      workout: `Parse this workout log into JSON. Return ONLY valid JSON, no explanation, no markdown.
+Format: {"exercises": [{"name": string, "sets": [{"reps": number, "weight": number}]}]}
+For a line like "4x8x315" create 4 sets each with reps=8 weight=315.
+For "1x8x225" create 1 set with reps=8 weight=225.
+Group sets under the exercise name that appears above them.
+
+Workout log:
+${text}
+
+Return only the JSON object.`
     };
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -154,7 +159,7 @@ Return only JSON, no explanation.`
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 500,
+          max_tokens: 1500,
           messages: [{ role: "user", content: prompts[tab] }]
         })
       });
