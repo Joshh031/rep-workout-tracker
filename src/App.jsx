@@ -567,6 +567,8 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
         <button onClick={() => setMode("pick")} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11 }}>←</button>
         <span style={{ fontSize: 16 }}>⚡</span>
         <span style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#888" }}>RUN</span>
+        <input type="date" value={workoutDate} onChange={e => setWorkoutDate(e.target.value)}
+          style={{ marginLeft: "auto", background: workoutDate !== new Date().toLocaleDateString("en-CA") ? "#1a0d00" : "#141414", border: `1px solid ${workoutDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#252525"}`, color: workoutDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#666", borderRadius: 5, padding: "4px 6px", fontSize: 10, fontFamily: "'DM Mono', monospace", cursor: "pointer" }} />
       </div>
 
       {[["distance","Total Distance","mi","0.01"],["duration","Run Time","mm:ss",""],["firstStop","First Stop","mi","0.01"],["pace","Avg Pace","min/mi","0.01"],["heartRate","Heart Rate","bpm","1"],["maxSpeed","Max Speed","mph","0.1"]].map(([f, lbl, unit, step]) => (
