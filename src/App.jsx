@@ -416,6 +416,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
           </div>
         </div>
       )}
+      <WhatsNext history={history} onSelect={(type) => startWorkout(type)} />
       <span style={g.label}>Choose Workout</span>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 28 }}>
         {WORKOUT_TYPES.map(t => (
@@ -1070,6 +1071,245 @@ function ConsistencyHeatmap({ history, dailyLog, sleepLog }) {
   );
 }
 
+// ── WORKOUT HISTORY CARD ──────────────────────────────────────────────────
+function WorkoutHistoryCard({ entry: e, onDelete }) {
+  const [expanded, setExpanded] = useState(false);
+  const totalSets = e.exercises?.reduce((a, ex) => a + ex.sets.filter(s => s.reps || s.weight).length, 0) || 0;
+  return (
+    <div style={{ ...g.card, overflow: "hidden" }}>
+      <div style={{ padding: "12px 14px", cursor: "pointer" }} onClick={() => setExpanded(x => !x)}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <span style={{ fontSize: 13 }}>{ICON[e.type]} <span style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "#888", marginLeft: 6 }}>{e.type}</span></span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={g.badge}>{e.date}</span>
+            <span style={{ fontSize: 9, color: "#555" }}>{expanded ? "▲" : "▼"}</span>
+            <button onClick={ev => { ev.stopPropagation(); onDelete(); }} style={{ background: "none", border: "1px solid #252525", color: "#555", padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono', monospace" }}>✕</button>
+          </div>
+        </div>
+        {e.exercises && <div style={{ fontSize: 10, color: "#555" }}>{e.exercises.map(ex => ex.name).join(" · ")}<span style={{ color: "#444", marginLeft: 8 }}>{totalSets} sets</span></div>}
+        {e.type === "run" && e.runData && <div style={{ fontSize: 10, color: "#666" }}>{e.runData.distance && `${e.runData.distance} mi`}{e.runData.duration && ` · ${e.runData.duration}`}{e.runData.pace && ` · ${e.runData.pace} /mi`}</div>}
+      </div>
+
+      {expanded && e.exercises && (
+        <div style={{ borderTop: "1px solid #1a1a1a", padding: "10px 14px" }}>
+          {e.exercises.map((ex, i) => {
+            const filledSets = ex.sets.filter(s => s.reps || s.weight);
+            if (!filledSets.length) return null;
+            return (
+              <div key={i} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 9, letterSpacing: 2, color: "#ff4d00", textTransform: "uppercase", marginBottom: 6 }}>{ex.name}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "20px 1fr 1fr", gap: 4 }}>
+                  <span style={{ fontSize: 7, color: "#444" }}>#</span>
+                  <span style={{ fontSize: 7, color: "#444", letterSpacing: 1 }}>REPS</span>
+                  <span style={{ fontSize: 7, color: "#444", letterSpacing: 1 }}>LBS</span>
+                  {filledSets.map((s, j) => (
+                    <>
+                      <span key={`n${j}`} style={{ fontSize: 9, color: "#555" }}>{j + 1}</span>
+                      <span key={`r${j}`} style={{ fontSize: 11, color: "#ccc", fontWeight: 600 }}>{s.reps || "—"}</span>
+                      <span key={`w${j}`} style={{ fontSize: 11, color: "#ccc", fontWeight: 600 }}>{s.weight || "—"}</span>
+                    </>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── WHAT'S NEXT ───────────────────────────────────────────────────────────
+function WhatsNext({ history, onSelect }) {
+  if (!history.length) return null;
+
+  const RECOVERY_HRS = { chest: 72, back: 72, legs: 96, shoulders: 72, biceps: 48, triceps: 48, run: 48 };
+  const ALL_TYPES = [...WORKOUT_TYPES, "run"];
+  const now = Date.now();
+
+  const lastDone = {};
+  ALL_TYPES.forEach(t => {
+    const last = history.find(h => h.type === t);
+    if (last) lastDone[t] = new Date(last.date).getTime();
+  });
+
+  const scores = ALL_TYPES.map(t => {
+    const last = lastDone[t];
+    if (!last) return { type: t, daysSince: null, ready: true, score: 999 };
+    const hrsSince = (now - last) / (1000 * 60 * 60);
+    const recovery = RECOVERY_HRS[t] || 72;
+    const score = hrsSince / recovery;
+    const daysSince = Math.floor(hrsSince / 24);
+    return { type: t, daysSince, ready: hrsSince >= recovery, score };
+  }).sort((a, b) => b.score - a.score);
+
+  const top2 = scores.slice(0, 2);
+
+  return (
+    <div style={{ ...g.card, padding: "14px 16px", marginBottom: 16, background: "#0a1a0a", border: "1px solid #1a3a1a" }}>
+      <div style={{ fontSize: 8, letterSpacing: 3, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 12 }}>◈ Recommended Today</div>
+      {top2.map((rec, idx) => (
+        <div key={rec.type} onClick={() => onSelect(rec.type)}
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: idx === 0 ? "#0f2a0f" : "#0a0a0a", border: `1px solid ${idx === 0 ? "#1a4a1a" : "#1a1a1a"}`, marginBottom: idx === 0 ? 8 : 0 }}>
+          <span style={{ fontSize: idx === 0 ? 26 : 20 }}>{ICON[rec.type]}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: idx === 0 ? 13 : 11, fontWeight: 700, color: idx === 0 ? "#e8e0d5" : "#888", letterSpacing: 2, textTransform: "uppercase" }}>{rec.type}</div>
+            <div style={{ fontSize: 8, color: "#555", marginTop: 2 }}>
+              {rec.daysSince === null ? "Never trained" : rec.daysSince === 0 ? "Trained today" : `${rec.daysSince}d ago`}
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+            <span style={{ fontSize: 7, color: rec.ready ? "#3a9e4f" : "#c49a1a", border: `1px solid ${rec.ready ? "#1a4020" : "#3a2a00"}`, borderRadius: 3, padding: "2px 5px", letterSpacing: 1 }}>{rec.ready ? "READY" : "ALMOST"}</span>
+            <span style={{ fontSize: 9, color: "#444" }}>→</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── WEEKLY SCORECARD ──────────────────────────────────────────────────────
+function WeeklyScorecard({ history, sleepLog, dailyLog }) {
+  const [analysis, setAnalysis] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, -1 = last week
+
+  // Get Mon-Sun of selected week
+  const getWeekBounds = (offset) => {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun
+    const mon = new Date(now);
+    mon.setDate(now.getDate() - ((day + 6) % 7) + offset * 7);
+    mon.setHours(0, 0, 0, 0);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    sun.setHours(23, 59, 59, 999);
+    return { mon, sun };
+  };
+
+  const { mon, sun } = getWeekBounds(weekOffset);
+
+  const inRange = (dateStr) => {
+    const d = new Date(dateStr);
+    return d >= mon && d <= sun;
+  };
+
+  const weekWorkouts = history.filter(h => inRange(h.date));
+  const weekSleep = sleepLog.filter(s => inRange(s.date));
+  const weekDaily = dailyLog.filter(d => inRange(d.date));
+
+  const workoutDays = new Set(weekWorkouts.map(h => h.date)).size;
+  const totalSets = weekWorkouts.reduce((a, h) => a + (h.exercises?.reduce((b, e) => b + e.sets.filter(s => s.reps || s.weight).length, 0) || 0), 0);
+  const avgSleep = weekSleep.length ? (weekSleep.reduce((a, s) => a + (parseFloat(s.sleepScore) || 0), 0) / weekSleep.length).toFixed(0) : null;
+  const avgHrv = weekSleep.length ? (weekSleep.reduce((a, s) => a + (parseFloat(s.hrv) || 0), 0) / weekSleep.filter(s => s.hrv).length).toFixed(0) : null;
+
+  const weekLabel = weekOffset === 0 ? "This Week" : weekOffset === -1 ? "Last Week" : `${mon.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+
+  const runAnalysis = async () => {
+    setLoading(true);
+    setAnalysis(null);
+    const prompt = `You are an elite fitness coach giving a weekly scorecard review. Be direct, specific, and encouraging but honest.
+
+Week: ${mon.toLocaleDateString()} – ${sun.toLocaleDateString()}
+Workouts completed: ${weekWorkouts.length} sessions across ${workoutDays} days
+Total sets: ${totalSets}
+Workout types: ${weekWorkouts.map(h => h.type).join(", ") || "none"}
+${weekWorkouts.map(h => `- ${h.date} ${h.type}: ${h.exercises?.map(e => `${e.name} ${e.sets.filter(s=>s.reps||s.weight).length}sets`).join(", ") || h.runData?.distance + "mi"}`).join("\n")}
+
+Sleep data:
+${weekSleep.map(s => `- ${s.date}: score=${s.sleepScore}, HRV=${s.hrv}, hrs=${s.hoursSlept}`).join("\n") || "No sleep data"}
+
+Daily activity:
+${weekDaily.map(d => `- ${d.date}: steps=${d.steps}, crunches=${d.crunches}, pushups=${d.pushups}`).join("\n") || "No daily data"}
+
+Give a scorecard with:
+1. WEEK GRADE (A/B/C/D/F) with one sentence justification
+2. BEST MOMENT — single best performance or habit this week
+3. WEAK SPOT — one specific thing to improve
+4. NEXT WEEK TARGET — one concrete, measurable goal
+
+Keep it under 200 words. Be a tough but fair coach.`;
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 400, messages: [{ role: "user", content: prompt }] })
+      });
+      const data = await res.json();
+      setAnalysis(data.content?.[0]?.text || "Unable to generate scorecard.");
+    } catch(e) {
+      setAnalysis("Error generating scorecard. Check your connection.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div>
+      {/* Week selector */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <button onClick={() => { setWeekOffset(w => w - 1); setAnalysis(null); }} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11 }}>←</button>
+        <span style={{ fontSize: 10, color: "#888", letterSpacing: 2, textTransform: "uppercase" }}>{weekLabel}</span>
+        <button onClick={() => { setWeekOffset(w => Math.min(0, w + 1)); setAnalysis(null); }} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11, opacity: weekOffset >= 0 ? 0.3 : 1 }}>→</button>
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+        {[
+          ["DAYS", workoutDays, "active"],
+          ["SESSIONS", weekWorkouts.length, "logged"],
+          ["SETS", totalSets, "total"],
+          ["SLEEP", avgSleep || "—", "avg score"],
+        ].map(([label, val, sub]) => (
+          <div key={label} style={{ ...g.card, padding: "10px 6px", textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#ff4d00", fontFamily: "'DM Mono', monospace" }}>{val}</div>
+            <div style={{ fontSize: 7, letterSpacing: 1, color: "#555", textTransform: "uppercase", marginTop: 2 }}>{label}</div>
+            <div style={{ fontSize: 7, color: "#333", marginTop: 1 }}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Day grid */}
+      <div style={{ ...g.card, padding: "12px 14px", marginBottom: 12 }}>
+        <div style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 8 }}>Week at a Glance</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+          {["M","T","W","T","F","S","S"].map((d, i) => {
+            const day = new Date(mon);
+            day.setDate(mon.getDate() + i);
+            const ds = day.toLocaleDateString();
+            const hasWorkout = weekWorkouts.some(h => h.date === ds);
+            const hasSleep = weekSleep.some(s => s.date === ds);
+            const isToday = day.toDateString() === new Date().toDateString();
+            const isFuture = day > new Date();
+            return (
+              <div key={i} style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 7, color: isToday ? "#ff4d00" : "#444", marginBottom: 3 }}>{d}</div>
+                <div style={{ height: 28, borderRadius: 4, background: isFuture ? "#0a0a0a" : hasWorkout ? "#ff4d00" : hasSleep ? "#0d2a3d" : "#141414", border: `1px solid ${isToday ? "#ff4d00" : "#1a1a1a"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {!isFuture && <span style={{ fontSize: 10 }}>{hasWorkout ? "💪" : hasSleep ? "😴" : ""}</span>}
+                </div>
+                <div style={{ fontSize: 7, color: "#333", marginTop: 2 }}>{day.getDate()}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* AI Scorecard */}
+      <button onClick={runAnalysis} disabled={loading}
+        style={{ ...g.primary, width: "100%", marginBottom: 12, background: loading ? "#1a1a1a" : "#ff4d00", fontSize: 10, letterSpacing: 2 }}>
+        {loading ? "⟳ GENERATING SCORECARD…" : "⚡ GENERATE WEEKLY SCORECARD"}
+      </button>
+
+      {analysis && (
+        <div style={{ ...g.card, padding: "16px" }}>
+          <div style={{ fontSize: 8, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase", marginBottom: 10 }}>⚡ Weekly Scorecard · {weekLabel}</div>
+          <div style={{ fontSize: 12, color: "#ccc", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{analysis}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── HISTORY TAB ───────────────────────────────────────────────────────────
 function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog, deleteDaily, sleepLog, setSleepLog, deleteSleep }) {
   const [search, setSearch] = useState("");
@@ -1157,14 +1397,14 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
     <div style={g.page}>
       {/* View toggle */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        {["log", "progress", "heatmap"].map(v => (
+        {["log", "progress", "heatmap", "scorecard"].map(v => (
           <button key={v} onClick={() => setView(v)} style={{
-            flex: 1, padding: "11px 0", borderRadius: 8, cursor: "pointer",
-            fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, textTransform: "uppercase",
+            flex: 1, padding: "9px 0", borderRadius: 8, cursor: "pointer",
+            fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: 1, textTransform: "uppercase",
             border: `1px solid ${view === v ? "#ff4d00" : "#2a2a2a"}`,
             background: view === v ? "#ff4d00" : "#141414",
             color: view === v ? "#fff" : "#777", fontWeight: view === v ? 700 : 400
-          }}>{v === "progress" ? "PROGRESS ✦" : v === "heatmap" ? "HEATMAP ◈" : "LOG"}</button>
+          }}>{v === "progress" ? "AI ✦" : v === "heatmap" ? "MAP ◈" : v === "scorecard" ? "WEEK ⚡" : "LOG"}</button>
         ))}
       </div>
 
@@ -1213,6 +1453,11 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
         </div>
       )}
 
+      {/* SCORECARD VIEW */}
+      {view === "scorecard" && (
+        <WeeklyScorecard history={history} sleepLog={sleepLog} dailyLog={dailyLog} />
+      )}
+
       {/* HEATMAP VIEW */}
       {view === "heatmap" && (
         <ConsistencyHeatmap history={history} dailyLog={dailyLog} sleepLog={sleepLog} />
@@ -1229,17 +1474,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
           )}
           {filtered.map(e => {
             if (e._kind === "workout") return (
-              <div key={e.id} style={{ ...g.card, padding: "12px 14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <span style={{ fontSize: 13 }}>{ICON[e.type]} <span style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "#888", marginLeft: 6 }}>{e.type}</span></span>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span style={g.badge}>{e.date}</span>
-                    <button onClick={() => deleteWorkout(e.id)} style={{ background: "none", border: "1px solid #252525", color: "#555", padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono', monospace" }}>✕</button>
-                  </div>
-                </div>
-                {e.exercises && <div style={{ fontSize: 10, color: "#666" }}>{e.exercises.map(ex => ex.name).join(" · ")}<span style={{ color: "#444", marginLeft: 8 }}>{e.exercises.reduce((a, ex) => a + ex.sets.length, 0)} sets</span></div>}
-                {e.type === "run" && e.runData && <div style={{ fontSize: 10, color: "#666" }}>{e.runData.distance && `${e.runData.distance} mi`}{e.runData.duration && ` · ${e.runData.duration}`}{e.runData.pace && ` · ${e.runData.pace} /mi`}</div>}
-              </div>
+              <WorkoutHistoryCard key={e.id} entry={e} onDelete={() => deleteWorkout(e.id)} />
             );
             if (e._kind === "daily") return (
               <div key={e.id} style={{ ...g.card, padding: "12px 14px" }}>
