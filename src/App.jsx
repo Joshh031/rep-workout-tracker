@@ -295,13 +295,14 @@ function QuickFillBar({ onApply }) {
 
 // ── WORKOUT TAB ────────────────────────────────────────────────────────────
 function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sleepLog }) {
-  const [mode, setMode] = useState("pick"); // pick | log
+  const [mode, setMode] = useState("pick"); // pick | preview | log
   const [workoutType, setWorkoutType] = useState(null);
   const [exercises, setExercises] = useState([]);
   const [runData, setRunData] = useState({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "" });
   const [showAlts, setShowAlts] = useState(null);
   const [saved, setSaved] = useState(false);
   const [draftId] = useState(() => "draft_" + Date.now());
+  const [completionModal, setCompletionModal] = useState(null); // { todayVol, lastVol, lastDate, prs }
   const autoSaveTimer = useRef(null);
 
   // Auto-save draft to localStorage whenever exercises change
@@ -344,13 +345,18 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
     setPendingDraft(null);
   };
 
+  const getLastSession = (type) => history.find(h => h.type === type) || null;
+
   const startWorkout = (type) => {
     setWorkoutType(type);
     if (type !== "run") setExercises(EXERCISE_DB[type].staples.map(n => ({ name: n, sets: [{ reps: "", weight: "" }] })));
     else setRunData({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "" });
-    setMode("log"); setSaved(false);
+    setMode("preview");
+    setSaved(false);
     localStorage.removeItem("rep_draft");
   };
+
+  const launchWorkout = () => setMode("log");
 
   const [workoutDate, setWorkoutDate] = useState(() => new Date().toLocaleDateString("en-CA"));
 
@@ -360,11 +366,38 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
   const removeExercise = (i) => setExercises(exercises.filter((_, idx) => idx !== i));
   const replaceWithAlt = (i, name) => { const u = [...exercises]; u[i].name = name; setExercises(u); setShowAlts(null); };
 
-
-
   const saveWorkout = async () => {
     const displayDate = new Date(workoutDate + "T12:00:00").toLocaleDateString();
     const entry = { id: Date.now(), date: displayDate, type: workoutType, ...(workoutType === "run" ? { runData } : { exercises }) };
+
+    // Build completion stats for modal
+    if (workoutType !== "run" && exercises.length) {
+      const lastSession = getLastSession(workoutType);
+      const calcVol = (exList) => (exList || []).reduce((a, ex) =>
+        a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) =>
+          b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0);
+      const todayVol = calcVol(exercises);
+      const lastVol = lastSession ? calcVol(lastSession.exercises) : 0;
+
+      // Find PRs
+      const prs = [];
+      exercises.forEach(ex => {
+        const todayMax = Math.max(0, ...ex.sets.filter(s => s.weight).map(s => parseFloat(s.weight)||0));
+        if (!todayMax) return;
+        let prevMax = 0;
+        history.forEach(session => {
+          (session.exercises || []).forEach(pex => {
+            if (pex.name?.toLowerCase() === ex.name?.toLowerCase()) {
+              const m = Math.max(0, ...pex.sets.filter(s => s.weight).map(s => parseFloat(s.weight)||0));
+              if (m > prevMax) prevMax = m;
+            }
+          });
+        });
+        if (todayMax > prevMax && prevMax > 0) prs.push({ name: ex.name, weight: todayMax, prev: prevMax });
+      });
+      setCompletionModal({ todayVol, lastVol, lastDate: lastSession?.date, prs, type: workoutType });
+    }
+
     const newH = [entry, ...history];
     setHistory(newH);
     await saveEntry(entry);
@@ -454,11 +487,134 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
     </div>
   );
 
+  // ── Preview mode ──
+  if (mode === "preview") {
+    const lastSession = getLastSession(workoutType);
+    const lastExercises = lastSession?.exercises || [];
+    return (
+      <div style={g.page}>
+        {/* Completion modal overlay */}
+        {completionModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "24px 20px", width: "100%", maxWidth: 380 }}>
+              <div style={{ fontSize: 10, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase", marginBottom: 16 }}>✓ Session Complete</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#e8e0d5", fontFamily: "'DM Mono', monospace" }}>{Math.round(completionModal.todayVol).toLocaleString()}</div>
+                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>TODAY LBS</div>
+                </div>
+                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: completionModal.todayVol >= completionModal.lastVol ? "#3a9e4f" : "#c0392b", fontFamily: "'DM Mono', monospace" }}>
+                    {completionModal.lastVol ? `${completionModal.todayVol >= completionModal.lastVol ? "+" : ""}${Math.round(((completionModal.todayVol - completionModal.lastVol) / completionModal.lastVol) * 100)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>VS LAST · {completionModal.lastDate || "N/A"}</div>
+                </div>
+              </div>
+              {completionModal.prs.length > 0 && (
+                <div style={{ background: "#0a1a0a", border: "1px solid #1a4020", borderRadius: 8, padding: "10px 12px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 8, letterSpacing: 2, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 8 }}>🏆 New PRs</div>
+                  {completionModal.prs.map((pr, i) => (
+                    <div key={i} style={{ fontSize: 10, color: "#ccc", marginBottom: 4 }}>
+                      {pr.name} — <span style={{ color: "#3a9e4f", fontWeight: 700 }}>{pr.weight} lbs</span> <span style={{ color: "#444" }}>(prev {pr.prev})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => { setCompletionModal(null); setMode("pick"); }} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <button onClick={() => setMode("pick")} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11 }}>←</button>
+          <span style={{ fontSize: 16 }}>{ICON[workoutType]}</span>
+          <span style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#888" }}>{workoutType}</span>
+          {lastSession && <span style={g.badge}>{lastSession.date}</span>}
+        </div>
+
+        {!lastSession ? (
+          <div style={{ ...g.card, padding: "20px", textAlign: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: "#555" }}>No previous {workoutType} session found.</div>
+            <div style={{ fontSize: 10, color: "#333", marginTop: 4 }}>This will be your baseline.</div>
+          </div>
+        ) : (
+          <div style={{ ...g.card, overflow: "hidden", marginBottom: 16 }}>
+            <div style={{ background: "#0f0f0f", padding: "10px 14px", borderBottom: "1px solid #1a1a1a" }}>
+              <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase" }}>Last Session · {lastSession.date}</div>
+            </div>
+            <div style={{ padding: "12px 14px" }}>
+              {lastExercises.map((ex, i) => {
+                const filled = ex.sets.filter(s => s.reps || s.weight);
+                if (!filled.length) return null;
+                const vol = filled.reduce((a, s) => a + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0);
+                const topSet = filled.reduce((a, b) => (parseFloat(b.weight)||0) > (parseFloat(a.weight)||0) ? b : a);
+                return (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 8, marginBottom: 8, borderBottom: i < lastExercises.length - 1 ? "1px solid #141414" : "none" }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#ccc", fontWeight: 600 }}>{ex.name}</div>
+                      <div style={{ fontSize: 9, color: "#555", marginTop: 2 }}>{filled.length} sets · top {topSet.reps}×{topSet.weight}lbs</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 9, color: "#444" }}>{Math.round(vol).toLocaleString()} lbs</div>
+                      <div style={{ fontSize: 7, color: "#333" }}>volume</div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ borderTop: "1px solid #1e1e1e", paddingTop: 8, marginTop: 4, display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 9, color: "#555" }}>Total Volume</span>
+                <span style={{ fontSize: 10, color: "#888", fontWeight: 700 }}>
+                  {Math.round(lastExercises.reduce((a, ex) => a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) => b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0)).toLocaleString()} lbs
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <button onClick={launchWorkout} style={{ ...g.primary, fontSize: 11, letterSpacing: 3 }}>
+          START {workoutType.toUpperCase()} →
+        </button>
+      </div>
+    );
+  }
+
   // ── Weights log ──
   if (workoutType !== "run") {
     const db = EXERCISE_DB[workoutType];
     return (
       <div style={g.page}>
+        {/* Completion modal */}
+        {completionModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "24px 20px", width: "100%", maxWidth: 380 }}>
+              <div style={{ fontSize: 10, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase", marginBottom: 4 }}>✓ {completionModal.type} Complete</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16, marginTop: 16 }}>
+                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#e8e0d5", fontFamily: "'DM Mono', monospace" }}>{Math.round(completionModal.todayVol).toLocaleString()}</div>
+                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>TODAY LBS</div>
+                </div>
+                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: completionModal.lastVol ? (completionModal.todayVol >= completionModal.lastVol ? "#3a9e4f" : "#c0392b") : "#555", fontFamily: "'DM Mono', monospace" }}>
+                    {completionModal.lastVol ? `${completionModal.todayVol >= completionModal.lastVol ? "+" : ""}${Math.round(((completionModal.todayVol - completionModal.lastVol) / completionModal.lastVol) * 100)}%` : "FIRST"}
+                  </div>
+                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>VS {completionModal.lastDate || "N/A"}</div>
+                </div>
+              </div>
+              {completionModal.prs?.length > 0 && (
+                <div style={{ background: "#0a1a0a", border: "1px solid #1a4020", borderRadius: 8, padding: "10px 12px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 8, letterSpacing: 2, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 8 }}>🏆 New PRs This Session</div>
+                  {completionModal.prs.map((pr, i) => (
+                    <div key={i} style={{ fontSize: 10, color: "#ccc", marginBottom: 4 }}>
+                      {pr.name} — <span style={{ color: "#3a9e4f", fontWeight: 700 }}>{pr.weight} lbs</span> <span style={{ color: "#444" }}>prev {pr.prev}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => { setCompletionModal(null); setMode("pick"); }} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
+            </div>
+          </div>
+        )}
+
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <button onClick={() => setMode("pick")} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11 }}>←</button>
           <span style={{ fontSize: 16 }}>{ICON[workoutType]}</span>
@@ -554,6 +710,45 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
         ))}
 
         <button style={{ ...g.ghost, width: "100%", marginBottom: 10 }} onClick={() => setExercises([...exercises, { name: "", sets: [{ reps: "", weight: "" }] }])}>+ ADD EXERCISE</button>
+
+        {/* Live volume comparison */}
+        {(() => {
+          const lastSession = getLastSession(workoutType);
+          if (!lastSession) return null;
+          const todayVol = exercises.reduce((a, ex) => a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) => b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0);
+          const lastVol = (lastSession.exercises || []).reduce((a, ex) => a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) => b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0);
+          if (!lastVol) return null;
+          const pct = Math.min(200, Math.round((todayVol / lastVol) * 100));
+          const ahead = todayVol >= lastVol;
+          const diff = Math.abs(todayVol - lastVol);
+          return (
+            <div style={{ ...g.card, padding: "12px 14px", marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase" }}>Volume vs Last Session</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: ahead ? "#3a9e4f" : "#c49a1a" }}>
+                  {todayVol > 0 ? `${ahead ? "+" : "-"}${Math.round(diff).toLocaleString()} lbs (${pct}%)` : "—"}
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <div>
+                  <div style={{ fontSize: 7, color: "#ff4d00", letterSpacing: 1, marginBottom: 3 }}>TODAY</div>
+                  <div style={{ height: 4, background: "#1a1a1a", borderRadius: 2 }}>
+                    <div style={{ height: "100%", width: `${Math.min(100, (todayVol / Math.max(todayVol, lastVol)) * 100)}%`, background: "#ff4d00", borderRadius: 2, transition: "width 0.3s" }} />
+                  </div>
+                  <div style={{ fontSize: 9, color: "#888", marginTop: 3 }}>{Math.round(todayVol).toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 7, color: "#444", letterSpacing: 1, marginBottom: 3 }}>LAST · {lastSession.date}</div>
+                  <div style={{ height: 4, background: "#1a1a1a", borderRadius: 2 }}>
+                    <div style={{ height: "100%", width: `${Math.min(100, (lastVol / Math.max(todayVol, lastVol)) * 100)}%`, background: "#333", borderRadius: 2 }} />
+                  </div>
+                  <div style={{ fontSize: 9, color: "#444", marginTop: 3 }}>{Math.round(lastVol).toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         <button style={g.primary} onClick={saveWorkout}>{saved ? "✓  SESSION SAVED" : "SAVE SESSION"}</button>
       </div>
     );
@@ -561,6 +756,29 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
 
   // ── Run log ──
   const dist = parseFloat(runData.distance) || 0;
+
+  // Auto-calculate pace from distance + duration
+  const calcPace = (distance, duration) => {
+    if (!distance || !duration) return "";
+    const d = parseFloat(distance);
+    if (!d) return "";
+    // Parse mm:ss or plain minutes
+    let totalMins = 0;
+    if (String(duration).includes(":")) {
+      const [mins, secs] = duration.split(":").map(Number);
+      totalMins = (mins || 0) + (secs || 0) / 60;
+    } else {
+      totalMins = parseFloat(duration) || 0;
+    }
+    if (!totalMins) return "";
+    const paceDecimal = totalMins / d;
+    const paceMins = Math.floor(paceDecimal);
+    const paceSecs = Math.round((paceDecimal - paceMins) * 60);
+    return `${paceMins}:${String(paceSecs).padStart(2, "0")}`;
+  };
+
+  const autoPace = calcPace(runData.distance, runData.duration);
+
   return (
     <div style={g.page}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -578,7 +796,25 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
               <span style={{ fontSize: 9, letterSpacing: 3, color: "#555", textTransform: "uppercase" }}>{lbl}</span>
               <span style={{ fontSize: 9, color: "#777" }}>{unit}</span>
             </div>
-            {f === "duration" ? <input style={g.input} type="text" placeholder="e.g. 32:14" value={runData[f]} onChange={e => setRunData({ ...runData, [f]: e.target.value })} /> : <input style={g.input} type="number" step={step} placeholder="0" value={runData[f]} onChange={e => setRunData({ ...runData, [f]: e.target.value })} />}
+            {f === "pace" ? (
+              <div style={{ position: "relative" }}>
+                <input style={{ ...g.input, color: !runData.pace && autoPace ? "#555" : "#e8e0d5" }}
+                  type="text" placeholder={autoPace || "e.g. 9:20"}
+                  value={runData.pace}
+                  onChange={e => setRunData({ ...runData, pace: e.target.value })} />
+                {!runData.pace && autoPace && (
+                  <div style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: "#555", fontFamily: "'DM Mono', monospace" }}>{autoPace}</span>
+                    <button onPointerDown={e => e.preventDefault()} onClick={() => setRunData(r => ({ ...r, pace: autoPace }))}
+                      style={{ fontSize: 7, color: "#ff4d00", border: "1px solid #ff4d00", borderRadius: 3, padding: "2px 5px", background: "none", cursor: "pointer", fontFamily: "'DM Mono', monospace", letterSpacing: 1 }}>USE</button>
+                  </div>
+                )}
+              </div>
+            ) : f === "duration" ? (
+              <input style={g.input} type="text" placeholder="e.g. 42:00" value={runData[f]} onChange={e => setRunData({ ...runData, [f]: e.target.value })} />
+            ) : (
+              <input style={g.input} type="number" step={step} placeholder="0" value={runData[f]} onChange={e => setRunData({ ...runData, [f]: e.target.value })} />
+            )}
           </div>
         </div>
       ))}
