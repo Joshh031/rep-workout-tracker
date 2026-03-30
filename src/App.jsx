@@ -1566,7 +1566,7 @@ function WorkoutHistoryCard({ entry: e, onDelete }) {
 function WhatsNext({ history, onSelect }) {
   if (!history.length) return null;
 
-  const RECOVERY_HRS = { chest: 72, back: 72, legs: 96, shoulders: 72, biceps: 48, triceps: 48, run: 48 };
+  const RECOVERY_HRS = { chest: 72, back: 72, legs: 96, shoulders: 72, biceps: 48, triceps: 48, run: 96 };
   const ALL_TYPES = [...WORKOUT_TYPES, "run"];
   const now = Date.now();
 
@@ -1578,22 +1578,27 @@ function WhatsNext({ history, onSelect }) {
 
   const scores = ALL_TYPES.map(t => {
     const last = lastDone[t];
-    if (!last) return { type: t, daysSince: null, ready: true, score: 999 };
+    if (!last) return { type: t, daysSince: null, ready: true, score: 9999 };
     const hrsSince = (now - last) / (1000 * 60 * 60);
     const recovery = RECOVERY_HRS[t] || 72;
-    const score = hrsSince / recovery;
     const daysSince = Math.floor(hrsSince / 24);
+    // Score by absolute hours since — more days = higher priority
+    // Subtract recovery hours so fully recovered types float to top
+    const score = hrsSince - recovery;
     return { type: t, daysSince, ready: hrsSince >= recovery, score };
   }).sort((a, b) => b.score - a.score);
 
-  const top2 = scores.slice(0, 2);
+  // Separate run from strength for display
+  const strengthScores = scores.filter(s => s.type !== "run");
+  const runScore = scores.find(s => s.type === "run");
+  const top2 = strengthScores.slice(0, 2);
 
   return (
     <div style={{ ...g.card, padding: "14px 16px", marginBottom: 16, background: "#0a1a0a", border: "1px solid #1a3a1a" }}>
       <div style={{ fontSize: 8, letterSpacing: 3, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 12 }}>◈ Recommended Today</div>
       {top2.map((rec, idx) => (
         <div key={rec.type} onClick={() => onSelect(rec.type)}
-          style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: idx === 0 ? "#0f2a0f" : "#0a0a0a", border: `1px solid ${idx === 0 ? "#1a4a1a" : "#1a1a1a"}`, marginBottom: idx === 0 ? 8 : 0 }}>
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: idx === 0 ? "#0f2a0f" : "#0a0a0a", border: `1px solid ${idx === 0 ? "#1a4a1a" : "#1a1a1a"}`, marginBottom: 8 }}>
           <span style={{ fontSize: idx === 0 ? 26 : 20 }}>{ICON[rec.type]}</span>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: idx === 0 ? 13 : 11, fontWeight: 700, color: idx === 0 ? "#e8e0d5" : "#888", letterSpacing: 2, textTransform: "uppercase" }}>{rec.type}</div>
@@ -1607,6 +1612,22 @@ function WhatsNext({ history, onSelect }) {
           </div>
         </div>
       ))}
+      {/* Run status line */}
+      {runScore && (
+        <div onClick={() => onSelect("run")}
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, cursor: "pointer", background: "#0a0a0f", border: `1px solid ${runScore.ready ? "#1a2a3a" : "#111"}`, marginTop: 0 }}>
+          <span style={{ fontSize: 16 }}>⚡</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#666", letterSpacing: 2, textTransform: "uppercase" }}>RUN</div>
+            <div style={{ fontSize: 8, color: "#444", marginTop: 1 }}>
+              {runScore.daysSince === null ? "No runs logged" : runScore.daysSince === 0 ? "Ran today" : `Last run ${runScore.daysSince}d ago · target every 4-5d`}
+            </div>
+          </div>
+          <span style={{ fontSize: 7, color: runScore.ready ? "#3a8fc4" : "#333", border: `1px solid ${runScore.ready ? "#0d2a3d" : "#1a1a1a"}`, borderRadius: 3, padding: "2px 5px", letterSpacing: 1 }}>
+            {runScore.daysSince === null ? "—" : runScore.ready ? "RUN TODAY" : `${runScore.daysSince}D`}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
