@@ -135,8 +135,9 @@ function VoiceFill({ tab, onFill }) {
     setStatus("parsing");
     const prompts = {
       daily: `Extract daily fitness data from this text and return ONLY valid JSON with these optional fields:
-{"steps": number, "crunches": number, "planks": number, "pushups": number}
-Accept any natural format like "100 crunches", "did 3 planks", "50 push-ups", "8500 steps".
+{"steps": number, "crunches": number, "planks": number, "pushups": number, "stretches": ["calves"|"quads"|"hamstrings"|"hips"]}
+Accept any natural format like "100 crunches", "did 3 planks", "50 push-ups", "8500 steps", "stretched calves and quads", "did all stretches".
+If they mention all stretches or full stretch routine, include all four: ["calves","quads","hamstrings","hips"].
 Text: "${text}"
 Return only JSON, no explanation.`,
       sleep: `Extract Oura sleep/recovery data from this text and return ONLY valid JSON with these optional fields:
@@ -222,7 +223,7 @@ Return only the JSON object.`
               ? "e.g.\nOverhead Press 4x8 @ 135\nTricep Pulldown 4x8 @ 57.5\nDips 4x8 @ 175"
               : tab === "sleep"
               ? "e.g.\nSleep 74, Readiness 68\nHRV 46, HR 52, Resp 15.2\n6:12 sleep, 1:24 REM"
-              : "e.g.\n100 crunches, 3 planks\n50 push-ups, 8500 steps"}
+              : "e.g.\n100 crunches, 3 planks, 50 push-ups\n8500 steps\nstretched calves and quads"}
             value={textInput}
             onChange={e => setTextInput(e.target.value)}
             style={{ ...g.input, width: "100%", minHeight: 90, resize: "vertical", fontSize: 11, lineHeight: 1.6, padding: "10px", boxSizing: "border-box", fontFamily: "system-ui, sans-serif" }}
@@ -299,7 +300,7 @@ function QuickFillBar({ onApply }) {
 }
 
 // ── WORKOUT TAB ────────────────────────────────────────────────────────────
-function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, setDailyLog, saveDailyEntry, sleepLog }) {
+function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, setDailyLog, saveDailyEntry, sleepLog, needsReminder, needsDailyLog, needsStretches, onGoToDaily }) {
   const [mode, setMode] = useState("pick"); // pick | preview | log
   const [workoutType, setWorkoutType] = useState(null);
   const [exercises, setExercises] = useState([]);
@@ -465,6 +466,19 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         </div>
       )}
       <WhatsNext history={history} onSelect={(type) => startWorkout(type)} />
+
+      {needsReminder && (
+        <div onClick={onGoToDaily} style={{ background: "#1a0d00", border: "1px solid #3a1a00", borderRadius: 8, padding: "10px 14px", marginBottom: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: 8, letterSpacing: 2, color: "#ff4d00", textTransform: "uppercase", marginBottom: 3 }}>● Today's Log Incomplete</div>
+            <div style={{ fontSize: 9, color: "#666" }}>
+              {[needsDailyLog && "crunches", needsStretches && "stretches"].filter(Boolean).join(" + ")} not logged yet
+            </div>
+          </div>
+          <span style={{ fontSize: 11, color: "#ff4d00" }}>→</span>
+        </div>
+      )}
+
       <span style={g.label}>Choose Workout</span>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 28 }}>
         {WORKOUT_TYPES.map(t => (
@@ -936,10 +950,28 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
 
   const saveDaily = async () => {
     const displayDate = logDate ? new Date(logDate + "T12:00:00").toLocaleDateString() : new Date().toLocaleDateString();
-    const entry = { id: Date.now(), date: displayDate, ...daily, stretches: STRETCHES.filter(s => stretchDone[s.key]).map(s => s.key) };
-    const newD = [entry, ...dailyLog];
-    setDailyLog(newD);
-    await saveEntry(entry);
+    const newStretches = STRETCHES.filter(s => stretchDone[s.key]).map(s => s.key);
+
+    // Check if entry already exists for this date — if so, merge
+    const existing = dailyLog.find(d => d.date === displayDate);
+    if (existing) {
+      const merged = {
+        ...existing,
+        crunches: daily.crunches || existing.crunches,
+        planks: daily.planks || existing.planks,
+        pushups: daily.pushups || existing.pushups,
+        steps: daily.steps || existing.steps,
+        stretches: [...new Set([...(existing.stretches || []), ...newStretches])],
+      };
+      const newD = dailyLog.map(d => d.date === displayDate ? merged : d);
+      setDailyLog(newD);
+      // Delete old entry and save merged
+      await saveEntry(merged);
+    } else {
+      const entry = { id: Date.now(), date: displayDate, ...daily, stretches: newStretches };
+      setDailyLog(prev => [entry, ...prev]);
+      await saveEntry(entry);
+    }
     setDaily({ crunches: "", planks: "", pushups: "", steps: "" });
     setLogDate(todayStr());
     setStretchDone({});
@@ -971,6 +1003,11 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
           pushups: parsed.pushups !== undefined ? String(parsed.pushups) : prev.pushups,
           steps: parsed.steps !== undefined ? String(parsed.steps) : prev.steps,
         }));
+        if (parsed.stretches?.length) {
+          const newStretches = {};
+          parsed.stretches.forEach(s => { newStretches[s] = true; });
+          setStretchDone(prev => ({ ...prev, ...newStretches }));
+        }
       }} />
 
       {/* Steps */}
@@ -1967,6 +2004,12 @@ export default function App() {
     await sbFetch("sleep_logs", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
   };
 
+  const todayDateStr = new Date().toLocaleDateString();
+  const todayDaily = dailyLog.find(d => d.date === todayDateStr);
+  const needsDailyLog = !todayDaily || !(todayDaily.crunches || todayDaily.planks || todayDaily.pushups);
+  const needsStretches = !todayDaily || !todayDaily.stretches?.length;
+  const needsReminder = needsDailyLog || needsStretches;
+
   const TABS = [
     { key: "workout", label: "WORKOUT", flex: 2 },
     { key: "daily",   label: "DAILY",   flex: 1 },
@@ -2004,8 +2047,12 @@ export default function App() {
                 cursor: "pointer",
                 transition: "all 0.2s",
                 fontWeight: tab === t.key ? 700 : 400,
+                position: "relative",
               }}>
                 {t.label}
+                {t.key === "daily" && needsReminder && (
+                  <span style={{ position: "absolute", top: 8, right: "calc(50% - 14px)", width: 5, height: 5, borderRadius: "50%", background: "#ff4d00", display: "inline-block" }} />
+                )}
               </button>
             ))}
           </div>
@@ -2019,7 +2066,7 @@ export default function App() {
           </div>
         ) : (
           <>
-            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} sleepLog={sleepLog} />}
+            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} onGoToDaily={() => setTab("daily")} />}
             {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} history={history} sleepLog={sleepLog} />}
             {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} history={history} dailyLog={dailyLog} />}
             {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
