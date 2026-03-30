@@ -134,13 +134,16 @@ function VoiceFill({ tab, onFill }) {
     setParsing(true);
     setStatus("parsing");
     const prompts = {
-      daily: `Extract daily fitness data from this voice note and return ONLY valid JSON with these optional fields:
+      daily: `Extract daily fitness data from this text and return ONLY valid JSON with these optional fields:
 {"steps": number, "crunches": number, "planks": number, "pushups": number}
-Voice note: "${text}"
+Accept any natural format like "100 crunches", "did 3 planks", "50 push-ups", "8500 steps".
+Text: "${text}"
 Return only JSON, no explanation.`,
-      sleep: `Extract sleep/recovery data from this voice note and return ONLY valid JSON with these optional fields:
-{"sleepScore": number, "readiness": number, "hoursSlept": number, "rem": number, "heartRate": number, "hrv": number, "respiratoryRate": number}
-Voice note: "${text}"
+      sleep: `Extract Oura sleep/recovery data from this text and return ONLY valid JSON with these optional fields:
+{"sleepScore": number, "readiness": number, "hoursSlept": string, "rem": string, "heartRate": number, "hrv": number, "respiratoryRate": number}
+hoursSlept and rem should be in H:MM format (e.g. "6:12", "1:24") if time format given, otherwise decimal.
+Accept any natural format like "sleep 74 readiness 68 HRV 46 HR 52 6:12 sleep 1:24 REM resp 15.2".
+Text: "${text}"
 Return only JSON, no explanation.`,
       workout: `Parse this workout log into JSON. Return ONLY valid JSON, no explanation, no markdown.
 Format: {"exercises": [{"name": string, "sets": [{"reps": number, "weight": number}]}]}
@@ -217,7 +220,9 @@ Return only the JSON object.`
           <textarea
             placeholder={tab === "workout"
               ? "e.g.\nOverhead Press 4x8 @ 135\nTricep Pulldown 4x8 @ 57.5\nDips 4x8 @ 175"
-              : "Describe your data in plain text…"}
+              : tab === "sleep"
+              ? "e.g.\nSleep 74, Readiness 68\nHRV 46, HR 52, Resp 15.2\n6:12 sleep, 1:24 REM"
+              : "e.g.\n100 crunches, 3 planks\n50 push-ups, 8500 steps"}
             value={textInput}
             onChange={e => setTextInput(e.target.value)}
             style={{ ...g.input, width: "100%", minHeight: 90, resize: "vertical", fontSize: 11, lineHeight: 1.6, padding: "10px", boxSizing: "border-box", fontFamily: "system-ui, sans-serif" }}
@@ -294,7 +299,7 @@ function QuickFillBar({ onApply }) {
 }
 
 // ── WORKOUT TAB ────────────────────────────────────────────────────────────
-function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sleepLog }) {
+function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, setDailyLog, saveDailyEntry, sleepLog }) {
   const [mode, setMode] = useState("pick"); // pick | preview | log
   const [workoutType, setWorkoutType] = useState(null);
   const [exercises, setExercises] = useState([]);
@@ -303,6 +308,8 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
   const [saved, setSaved] = useState(false);
   const [draftId] = useState(() => "draft_" + Date.now());
   const [completionModal, setCompletionModal] = useState(null); // { todayVol, lastVol, lastDate, prs }
+  const [postWorkoutDaily, setPostWorkoutDaily] = useState({ crunches: "", planks: "", pushups: "" });
+  const [postStretch, setPostStretch] = useState({});
   const autoSaveTimer = useRef(null);
 
   // Auto-save draft to localStorage whenever exercises change
@@ -395,7 +402,15 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
         });
         if (todayMax > prevMax && prevMax > 0) prs.push({ name: ex.name, weight: todayMax, prev: prevMax });
       });
-      setCompletionModal({ todayVol, lastVol, lastDate: lastSession?.date, prs, type: workoutType });
+      setCompletionModal({
+        todayVol, lastVol, lastDate: lastSession?.date, prs, type: workoutType,
+        saveDaily: async (dailyData, stretches) => {
+          const today = new Date().toLocaleDateString();
+          const entry = { id: Date.now(), date: today, ...dailyData, stretches: Object.keys(stretches).filter(k => stretches[k]) };
+          setDailyLog(prev => [entry, ...prev]);
+          await saveDailyEntry(entry);
+        }
+      });
     }
 
     const newH = [entry, ...history];
@@ -520,7 +535,40 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
                   ))}
                 </div>
               )}
-              <button onClick={() => { setCompletionModal(null); setMode("pick"); }} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
+              {/* Post-workout crunches + stretches */}
+              <div style={{ background: "#0f0f0f", border: "1px solid #1a1a1a", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+                <div style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 10 }}>Log Crunches & Stretches</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+                  {[["crunches","✦","Crunches"],["planks","◆","Planks"],["pushups","▲","Push-Ups"]].map(([f,icon,lbl]) => (
+                    <div key={f} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 12, marginBottom: 3 }}>{icon}</div>
+                      <div style={{ fontSize: 7, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 5 }}>{lbl}</div>
+                      <input style={{ ...g.numInput, fontSize: 14 }} type="number" placeholder="0"
+                        value={postWorkoutDaily[f]}
+                        onChange={e => setPostWorkoutDaily(p => ({ ...p, [f]: e.target.value }))} />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 8, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Stretches</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  {STRETCHES.map(s => (
+                    <button key={s.key} onClick={() => setPostStretch(p => ({ ...p, [s.key]: !p[s.key] }))}
+                      style={{ padding: "7px 8px", borderRadius: 6, border: `1px solid ${postStretch[s.key] ? "#1a4020" : "#1e1e1e"}`, background: postStretch[s.key] ? "#0b180b" : "#141414", color: postStretch[s.key] ? "#3a9e4f" : "#555", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
+                      {postStretch[s.key] ? "✓ " : ""}{s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => {
+                const hasActivity = Object.values(postWorkoutDaily).some(v => v) || Object.values(postStretch).some(Boolean);
+                if (hasActivity && completionModal?.saveDaily) {
+                  completionModal.saveDaily(postWorkoutDaily, postStretch);
+                }
+                setPostWorkoutDaily({ crunches: "", planks: "", pushups: "" });
+                setPostStretch({});
+                setCompletionModal(null);
+                setMode("pick");
+              }} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
             </div>
           </div>
         )}
@@ -610,7 +658,40 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, sle
                   ))}
                 </div>
               )}
-              <button onClick={() => { setCompletionModal(null); setMode("pick"); }} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
+              {/* Post-workout crunches + stretches */}
+              <div style={{ background: "#0f0f0f", border: "1px solid #1a1a1a", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+                <div style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 10 }}>Log Crunches & Stretches</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+                  {[["crunches","✦","Crunches"],["planks","◆","Planks"],["pushups","▲","Push-Ups"]].map(([f,icon,lbl]) => (
+                    <div key={f} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 12, marginBottom: 3 }}>{icon}</div>
+                      <div style={{ fontSize: 7, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 5 }}>{lbl}</div>
+                      <input style={{ ...g.numInput, fontSize: 14 }} type="number" placeholder="0"
+                        value={postWorkoutDaily[f]}
+                        onChange={e => setPostWorkoutDaily(p => ({ ...p, [f]: e.target.value }))} />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 8, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Stretches</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  {STRETCHES.map(s => (
+                    <button key={s.key} onClick={() => setPostStretch(p => ({ ...p, [s.key]: !p[s.key] }))}
+                      style={{ padding: "7px 8px", borderRadius: 6, border: `1px solid ${postStretch[s.key] ? "#1a4020" : "#1e1e1e"}`, background: postStretch[s.key] ? "#0b180b" : "#141414", color: postStretch[s.key] ? "#3a9e4f" : "#555", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
+                      {postStretch[s.key] ? "✓ " : ""}{s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => {
+                const hasActivity = Object.values(postWorkoutDaily).some(v => v) || Object.values(postStretch).some(Boolean);
+                if (hasActivity && completionModal?.saveDaily) {
+                  completionModal.saveDaily(postWorkoutDaily, postStretch);
+                }
+                setPostWorkoutDaily({ crunches: "", planks: "", pushups: "" });
+                setPostStretch({});
+                setCompletionModal(null);
+                setMode("pick");
+              }} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
             </div>
           </div>
         )}
@@ -1938,7 +2019,7 @@ export default function App() {
           </div>
         ) : (
           <>
-            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} sleepLog={sleepLog} />}
+            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} sleepLog={sleepLog} />}
             {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} history={history} sleepLog={sleepLog} />}
             {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} history={history} dailyLog={dailyLog} />}
             {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
