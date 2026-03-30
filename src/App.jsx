@@ -1154,7 +1154,7 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
                 <span>✦ {d.crunches || 0}</span><span>◆ {d.planks || 0}</span><span>▲ {d.pushups || 0}</span>
               </div>
               {d.steps && <div style={{ fontSize: 11, color: parseInt(d.steps) >= 10000 ? "#3a9e4f" : "#444", marginBottom: d.stretches?.length ? 7 : 0 }}>↳ {parseInt(d.steps).toLocaleString()} steps</div>}
-              {d.stretches?.length > 0 && <div style={{ fontSize: 10, color: "#1e4a26" }}>🧘 {d.stretches.join(", ")}</div>}
+              {d.stretches?.length > 0 && <div style={{ fontSize: 10, color: "#3a9e4f" }}>🧘 {d.stretches.join(", ")}</div>}
             </div>
           ))}
         </>
@@ -1931,7 +1931,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                 <div style={{ fontSize: 10, color: "#666" }}>
                   {e.steps && <span>↳ {parseInt(e.steps).toLocaleString()} steps · </span>}
                   ✦ {e.crunches || 0} · ◆ {e.planks || 0} · ▲ {e.pushups || 0}
-                  {e.stretches?.length > 0 && <span style={{ color: "#3a5e3a" }}> · 🧘 {e.stretches.join(", ")}</span>}
+                  {e.stretches?.length > 0 && <span style={{ color: "#3a9e4f" }}> · 🧘 {e.stretches.join(", ")}</span>}
                 </div>
               </div>
             );
@@ -2092,7 +2092,12 @@ export default function App() {
   };
 
   const todayDateStr = new Date().toLocaleDateString();
-  const todayDaily = dailyLog.find(d => d.date === todayDateStr);
+  const todayDaily = dailyLog.find(d => {
+    // Match against today in any locale format
+    const entryDate = new Date(d.date);
+    const today = new Date();
+    return entryDate.toDateString() === today.toDateString();
+  });
   const needsDailyLog = !todayDaily || !(todayDaily.crunches || todayDaily.planks || todayDaily.pushups);
   const needsStretches = !todayDaily || !todayDaily.stretches?.length;
   const needsReminder = needsDailyLog || needsStretches;
