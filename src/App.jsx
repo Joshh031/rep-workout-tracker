@@ -404,7 +404,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   const [mode, setMode] = useState("pick"); // pick | preview | log
   const [workoutType, setWorkoutType] = useState(null);
   const [exercises, setExercises] = useState([]);
-  const [runData, setRunData] = useState({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "" });
+  const [runData, setRunData] = useState({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "", location: "", feel: "", stopReason: "", notes: "" });
   const [showAlts, setShowAlts] = useState(null);
   const [saved, setSaved] = useState(false);
   const [draftId] = useState(() => "draft_" + Date.now());
@@ -458,7 +458,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   const startWorkout = (type) => {
     setWorkoutType(type);
     if (type !== "run") setExercises(EXERCISE_DB[type].staples.map(n => ({ name: n, sets: [{ reps: "", weight: "" }] })));
-    else setRunData({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "" });
+    else setRunData({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "", location: "", feel: "", stopReason: "", notes: "" });
     setMode("preview");
     setSaved(false);
     localStorage.removeItem("rep_draft");
@@ -1029,9 +1029,66 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
           <span style={{ ...g.label, marginBottom: 6 }}>vs Last Run · {lastRun.date}</span>
           <div style={{ fontSize: 11, color: "#444", lineHeight: 1.9 }}>
             {lastRun.runData.distance && `${lastRun.runData.distance} mi`}{lastRun.runData.pace && ` · ${lastRun.runData.pace} /mi`}{lastRun.runData.heartRate && ` · ${lastRun.runData.heartRate} bpm`}
+            {lastRun.runData.location && <span style={{ color: "#333" }}> · {lastRun.runData.location}</span>}
+            {lastRun.runData.notes && <div style={{ fontSize: 10, color: "#333", marginTop: 4, fontStyle: "italic" }}>"{lastRun.runData.notes}"</div>}
           </div>
         </div>
       )}
+
+      {/* Run Context */}
+      <div style={{ ...g.card, padding: "14px 16px", marginBottom: 14 }}>
+        <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase", marginBottom: 12 }}>Run Context</div>
+
+        {/* Location */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 8, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>Location</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {["Outdoor", "Treadmill", "Track", "Trail"].map(loc => (
+              <button key={loc} onClick={() => setRunData(r => ({ ...r, location: r.location === loc ? "" : loc }))}
+                style={{ padding: "5px 10px", borderRadius: 5, border: `1px solid ${runData.location === loc ? "#ff4d00" : "#252525"}`, background: runData.location === loc ? "#1c1008" : "none", color: runData.location === loc ? "#ff4d00" : "#555", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
+                {loc}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* How I felt */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 8, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>How I Felt</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {["Strong 💪", "Good", "OK", "Tired", "Struggled 😓"].map(feel => (
+              <button key={feel} onClick={() => setRunData(r => ({ ...r, feel: r.feel === feel ? "" : feel }))}
+                style={{ padding: "5px 10px", borderRadius: 5, border: `1px solid ${runData.feel === feel ? "#ff4d00" : "#252525"}`, background: runData.feel === feel ? "#1c1008" : "none", color: runData.feel === feel ? "#ff4d00" : "#555", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
+                {feel}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Why I stopped */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 8, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>Why I Stopped</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {["Hit goal", "Time limit", "Fatigue", "Injury", "Weather"].map(reason => (
+              <button key={reason} onClick={() => setRunData(r => ({ ...r, stopReason: r.stopReason === reason ? "" : reason }))}
+                style={{ padding: "5px 10px", borderRadius: 5, border: `1px solid ${runData.stopReason === reason ? "#ff4d00" : "#252525"}`, background: runData.stopReason === reason ? "#1c1008" : "none", color: runData.stopReason === reason ? "#ff4d00" : "#555", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
+                {reason}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Free notes */}
+        <div>
+          <div style={{ fontSize: 8, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>Notes</div>
+          <textarea
+            placeholder="Pacing felt off first mile, picked it up after... weather was perfect... stopped at light on Main St..."
+            value={runData.notes}
+            onChange={e => setRunData(r => ({ ...r, notes: e.target.value }))}
+            style={{ ...g.input, width: "100%", minHeight: 70, resize: "vertical", fontSize: 11, lineHeight: 1.6, padding: "10px", boxSizing: "border-box", fontFamily: "system-ui, sans-serif" }}
+          />
+        </div>
+      </div>
 
       <button style={g.primary} onClick={saveWorkout}>{saved ? "✓  RUN SAVED" : "SAVE RUN"}</button>
     </div>
@@ -1543,7 +1600,14 @@ function WorkoutHistoryCard({ entry: e, onDelete }) {
           </div>
         </div>
         {e.exercises && <div style={{ fontSize: 10, color: "#555" }}>{e.exercises.map(ex => ex.name).join(" · ")}<span style={{ color: "#444", marginLeft: 8 }}>{totalSets} sets</span></div>}
-        {e.type === "run" && e.runData && <div style={{ fontSize: 10, color: "#666" }}>{e.runData.distance && `${e.runData.distance} mi`}{e.runData.duration && ` · ${e.runData.duration}`}{e.runData.pace && ` · ${e.runData.pace} /mi`}</div>}
+        {e.type === "run" && e.runData && (
+          <div style={{ fontSize: 10, color: "#666" }}>
+            {e.runData.distance && `${e.runData.distance} mi`}{e.runData.duration && ` · ${e.runData.duration}`}{e.runData.pace && ` · ${e.runData.pace} /mi`}
+            {e.runData.location && <span style={{ color: "#444" }}> · {e.runData.location}</span>}
+            {e.runData.feel && <span style={{ color: "#444" }}> · {e.runData.feel}</span>}
+            {e.runData.notes && <div style={{ fontSize: 9, color: "#333", marginTop: 3, fontStyle: "italic" }}>"{e.runData.notes}"</div>}
+          </div>
+        )}
       </div>
 
       {expanded && e.exercises && (
