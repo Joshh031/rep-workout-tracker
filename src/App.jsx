@@ -1,1093 +1,2278 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Daily Tracker" />
-  <meta name="theme-color" content="#0f0f13" />
-  <title>Daily Tracker</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-  <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyCcEKJOMx5nLuD_ftGLu0NBPJ8yr5FnekI",
-      authDomain: "familyhub-d72f8.firebaseapp.com",
-      projectId: "familyhub-d72f8",
-      storageBucket: "familyhub-d72f8.firebasestorage.app",
-      messagingSenderId: "242948947064",
-      appId: "1:242948947064:web:fa31a7165c6f2d4f1f818d"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-    const TRACKER_DOC = db.collection("dailyTracker").doc("joshh031");
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #0f0f13; font-family: 'DM Mono', monospace; }
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: #1a1a22; }
-    ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 2px; }
-    .cat-row { display:flex; align-items:center; gap:10px; padding:8px 12px 8px 16px; border-radius:10px; transition:background 0.15s; user-select:none; -webkit-tap-highlight-color:transparent; }
-    .cat-row:active { background:#1e1e2a; }
-    .cat-row.checked { background:#1a2a1e; }
-    .cat-row.penalty-row:active { background:#2a1a1a; }
-    .cat-row.penalty-row.checked { background:#2a1a1a; }
-    .check-box { width:22px; height:22px; border-radius:6px; border:2px solid #3b3b50; flex-shrink:0; display:flex; align-items:center; justify-content:center; transition:all 0.15s; background:transparent; cursor:pointer; }
-    .checked .check-box { background:#22c55e; border-color:#22c55e; }
-    .penalty-row.checked .check-box { background:#ef4444; border-color:#ef4444; }
-    .seg-btn { padding:5px 10px; border-radius:6px; border:none; cursor:pointer; font-size:12px; font-family:'DM Mono',monospace; font-weight:500; transition:all 0.12s; -webkit-tap-highlight-color:transparent; }
-    .multi-row { display:flex; align-items:center; gap:10px; padding:8px 12px 8px 16px; border-radius:10px; }
-    input[type="date"] { background:transparent; border:none; color:#666; font-family:'DM Mono',monospace; font-size:11px; outline:none; padding:0; cursor:pointer; letter-spacing:0.05em; }
-    input[type="text"] { background:#1a1a22; border:1px solid #2a2a3a; color:#e2e8f0; border-radius:8px; padding:10px 12px; font-family:'DM Mono',monospace; font-size:14px; outline:none; }
-    input[type="text"]:focus { border-color:#3b82f6; }
-    textarea { background:#1a1a22; border:1px solid #2a2a3a; color:#e2e8f0; border-radius:12px; padding:12px 14px; font-family:'DM Mono',monospace; font-size:13px; outline:none; width:100%; resize:none; line-height:1.6; }
-    textarea:focus { border-color:#3b82f6; }
-    textarea::placeholder { color:#333; }
-    .hist-row { padding:12px 16px; border-radius:10px; background:#1a1a22; margin-bottom:8px; display:flex; align-items:center; gap:12px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-    .hist-row:active { background:#1e1e2a; }
-    .section-label { font-size:10px; color:#555; letter-spacing:0.15em; padding:0 8px; margin-bottom:8px; }
-    .tab-btn { flex:1; padding:10px 0; border:none; background:transparent; font-family:'DM Mono',monospace; font-size:11px; font-weight:500; letter-spacing:0.12em; cursor:pointer; transition:all 0.15s; margin-bottom:-1px; }
-    .stat-card { background:#13131c; border:1px solid #1e1e2e; border-radius:14px; padding:16px; }
-    .hist-sub-btn { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-family:'DM Mono',monospace; font-size:11px; font-weight:500; letter-spacing:0.08em; transition:all 0.15s; -webkit-tap-highlight-color:transparent; }
-    .cat-drill-row { display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:10px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-    .cat-drill-row:active { background:#1e1e2a; }
-    .back-btn { display:flex; align-items:center; gap:6px; background:none; border:none; color:#555; font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; padding:0; letter-spacing:0.08em; -webkit-tap-highlight-color:transparent; }
-    .reorder-btn { background:none; border:none; color:#333; cursor:pointer; padding:3px 4px; border-radius:4px; font-size:14px; line-height:1; -webkit-tap-highlight-color:transparent; display:flex; align-items:center; justify-content:center; transition:color 0.1s; }
-    .reorder-btn:active { color:#888; }
-    .reorder-col { display:flex; flex-direction:column; gap:0px; flex-shrink:0; }
-    .edit-mode-btn { background:none; border:1px solid #2a2a3a; color:#555; font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.1em; padding:4px 10px; border-radius:6px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-    .edit-mode-btn.active { border-color:#3b82f6; color:#3b82f6; }
-    .coach-btn { width:100%; padding:14px; border-radius:12px; border:none; cursor:pointer; font-family:'DM Mono',monospace; font-size:12px; font-weight:500; letter-spacing:0.1em; transition:all 0.2s; -webkit-tap-highlight-color:transparent; }
-    .coach-btn:disabled { opacity:0.5; cursor:not-allowed; }
-    .coach-section { background:linear-gradient(145deg,#0d0d1a,#13131f); border:1px solid #23233a; border-radius:16px; padding:20px; margin-bottom:12px; }
-    .coach-period-btn { padding:6px 14px; border-radius:8px; border:none; cursor:pointer; font-family:'DM Mono',monospace; font-size:11px; font-weight:500; letter-spacing:0.08em; transition:all 0.15s; -webkit-tap-highlight-color:transparent; }
-    .insight-block { background:#0f0f13; border-radius:12px; padding:14px 16px; margin-bottom:10px; border-left:3px solid #3b82f6; }
-    .insight-block.warning { border-left-color:#f59e0b; }
-    .insight-block.success { border-left-color:#22c55e; }
-    .insight-block.tip { border-left-color:#a855f7; }
-    input[type="password"] { background:#1a1a22; border:1px solid #2a2a3a; color:#e2e8f0; border-radius:8px; padding:10px 12px; font-family:'DM Mono',monospace; font-size:13px; outline:none; width:100%; }
-    input[type="password"]:focus { border-color:#3b82f6; }
-    .block-header { display:flex; align-items:center; justify-content:space-between; padding:10px 16px 6px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-    .block-header:active { opacity:0.7; }
-    .block-pill { font-size:9px; letter-spacing:0.15em; padding:3px 8px; border-radius:20px; font-weight:500; }
-    .midday-banner { margin:12px 16px 0; border-radius:14px; padding:14px 16px; display:flex; align-items:center; gap:12px; }
-    .commit-item { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:10px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
-    .commit-item:active { background:#1e1e2a; }
-  </style>
-</head>
-<body>
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useCallback, useMemo, useEffect } = React;
+import { useState, useRef, useEffect } from "react";
 
-    const MULTI_CATEGORIES = {
-      gym:          { label:"Gym",           emoji:"🏋️", options:[{label:"Skip",value:0},{label:"Lift",value:10},{label:"Run",value:15}] },
-      njow:         { label:"NJOW",          emoji:"🏃", options:[{label:"0",value:0},{label:"2",value:2},{label:"3",value:3},{label:"4",value:4},{label:"5",value:5}] },
-      stretch:      { label:"Stretch",       emoji:"🤸", options:[{label:"0",value:0},{label:"1",value:3},{label:"2",value:6},{label:"3",value:9},{label:"4",value:12}] },
-      minimizespend:{ label:"Minimize Spend",emoji:"💰", options:[{label:"—",value:0},{label:"Good",value:5},{label:"Great",value:10}] },
-    };
+const EXERCISE_DB = {
+  chest:     { staples: ["Bench Press", "Incline Bench", "Cable Fly", "Dumbbell Press", "Push-Up"], alternatives: ["Decline Bench", "Pec Deck", "Landmine Press", "Dips", "Cable Crossover", "Chest Pullover", "Floor Press", "Svend Press"] },
+  back:      { staples: ["Pull-Up", "Barbell Row", "Lat Pulldown", "Seated Cable Row", "Face Pull", "Shrugs"], alternatives: ["T-Bar Row", "Single-Arm DB Row", "Meadows Row", "Chest-Supported Row", "Straight-Arm Pulldown", "Rack Pull", "Good Morning", "Reverse Fly"] },
+  legs:      { staples: ["Squat", "Romanian Deadlift", "Leg Press", "Leg Curl", "Calf Raise"], alternatives: ["Hack Squat", "Bulgarian Split Squat", "Leg Extension", "Walking Lunge", "Box Jump", "Sumo Deadlift", "Hip Thrust", "Goblet Squat"] },
+  shoulders: { staples: ["Overhead Press", "Lateral Raise", "Front Raise", "Rear Delt Fly", "Arnold Press", "Rear Delts", "Shrugs"], alternatives: ["Cable Lateral Raise", "Face Pull", "Upright Row", "Shrug", "Landmine Press", "Cuban Press", "Behind-Neck Press", "Plate Raise"] },
+  biceps:    { staples: ["Barbell Curl", "Hammer Curl", "Incline Curl", "Cable Curl", "Concentration Curl"], alternatives: ["Preacher Curl", "Spider Curl", "Zottman Curl", "21s", "Cross-Body Curl", "Chin-Up", "Reverse Curl", "Rope Hammer Curl"] },
+  triceps:   { staples: ["Skull Crusher", "Tricep Pushdown", "Overhead Extension", "Dips", "Close-Grip Bench"], alternatives: ["Diamond Push-Up", "Kickback", "JM Press", "Tate Press", "Cable Overhead Extension", "Single-Arm Pushdown", "Board Press", "Rolling DB Extension"] },
+  vacation:  { staples: ["Push-Up", "Diamond Push-Up", "Pike Push-Up", "Dips (Chair)", "Bodyweight Squat"], alternatives: ["Decline Push-Up", "Archer Push-Up", "Wide Push-Up", "Jump Squat", "Bulgarian Split Squat", "Reverse Lunge", "Glute Bridge", "Single-Leg Bridge", "Calf Raise", "Hollow Body Hold", "Leg Raise", "Mountain Climber", "Plank Shoulder Tap", "Side Plank", "Dead Bug", "Inverted Row (Table)", "Tricep Dip (Chair)", "Bear Crawl"] },
+};
 
-    // block: "am" | "mid" | "pm"
-    const DEFAULT_CATEGORIES = [
-      { key:"gym",          label:"Gym",               points:10, emoji:"🏋️", multi:true, block:"am" },
-      { key:"njow",         label:"NJOW",               points:0,  emoji:"🏃", multi:true, block:"am" },
-      { key:"crunches",     label:"Crunches",           points:4,  emoji:"💪", block:"am" },
-      { key:"planks",       label:"Planks",             points:4,  emoji:"🧘", block:"am" },
-      { key:"pushups",      label:"40+ Pushups",        points:3,  emoji:"🔥", block:"am" },
-      { key:"breathing",    label:"4x4 Breathing",      points:5,  emoji:"🌬️", block:"am" },
-      { key:"eyecare",      label:"Eye Care",           points:3,  emoji:"👁️", block:"am" },
-      { key:"mirroring",    label:"Mirroring",          points:10, emoji:"🪞", block:"am" },
-      { key:"shave",        label:"Shave",              points:5,  emoji:"✂️", block:"am" },
-      { key:"forearms",     label:"Forearms",           points:2,  emoji:"💪", block:"am" },
-      { key:"sleep7",       label:"Sleep 7 Hours",      points:8,  emoji:"😴", block:"am" },
-      { key:"irestore",     label:"IRestore",           points:5,  emoji:"🪴", block:"mid" },
-      { key:"omnilux",      label:"Omnilux",            points:3,  emoji:"💡", block:"mid" },
-      { key:"hair",         label:"Hair",               points:3,  emoji:"💇", block:"mid" },
-      { key:"stretch",      label:"Stretch",            points:12, emoji:"🤸", multi:true, block:"mid" },
-      { key:"whitening",    label:"Whitening",          points:9,  emoji:"😁", block:"mid" },
-      { key:"arabic",       label:"Arabic",             points:6,  emoji:"🌍", block:"mid" },
-      { key:"roomclean",    label:"Room Clean",         points:1,  emoji:"🧹", block:"mid" },
-      { key:"officeclean",  label:"Clean Office",       points:1,  emoji:"🗂️", block:"mid" },
-      { key:"recordfood",   label:"Record Food",        points:3,  emoji:"🥗", block:"mid" },
-      { key:"hydrate",      label:"Sufficient Hydrate", points:5,  emoji:"💧", block:"mid" },
-      { key:"steps10k",     label:"10k Steps",          points:3,  emoji:"👟", block:"pm" },
-      { key:"geopol",       label:"Geopol Futures",     points:3,  emoji:"🗺️", block:"mid" },
-      { key:"podcast",      label:"Podcast",            points:5,  emoji:"🎙️", block:"mid" },
-      { key:"kidssports",   label:"Kids Sports",        points:5,  emoji:"⚽", block:"mid" },
-      { key:"readmacro",    label:"Read All Macro",     points:6,  emoji:"📊", block:"mid" },
-      { key:"kidsstudy",    label:"Kids Study/Read",    points:7,  emoji:"📖", block:"pm" },
-      { key:"minimizespend",label:"Minimize Spend",     points:10, emoji:"💰", multi:true, block:"pm" },
-      { key:"hip",          label:"Hip",                points:5,  emoji:"🦴", block:"am" },
-      { key:"cerave",       label:"Nighttime CeraVe",   points:3,  emoji:"🧴", block:"pm" },
-      { key:"psoriasis",    label:"Psoriasis",          points:3,  emoji:"🧴", block:"am" },
-      { key:"feet",         label:"Feet",               points:3,  emoji:"🦶", block:"am" },
-      { key:"journaling",   label:"Journaling",         points:4,  emoji:"✍️", block:"pm" },
-      { key:"social",       label:"Social Effort",      points:5,  emoji:"🤝", block:"pm" },
-      { key:"read45",       label:"Read 45 mins",       points:5,  emoji:"📚", block:"pm" },
-      { key:"readbook",     label:"Read Book",          points:5,  emoji:"📕", block:"pm" },
-      { key:"limitbooze",   label:"Limit Booze",        points:2,  emoji:"🍷", block:"pm" },
-      { key:"callparents",  label:"Call Parents",       points:5,  emoji:"📞", block:"pm" },
-      { key:"sauna",        label:"Sauna",              points:4,  emoji:"🔆", block:"pm" },
-      { key:"smell",        label:"Smell",              points:3,  emoji:"🌸", block:"pm" },
-      { key:"completebook", label:"Complete Book",      points:5,  emoji:"📗", block:"pm" },
-      { key:"wordle",       label:"Wordle",             points:2,  emoji:"🟩", block:"pm" },
-      { key:"starchart",    label:"Kids Star Chart",    points:2,  emoji:"⭐", block:"pm" },
-      { key:"psoriasispm",  label:"Psoriasis PM",       points:1,  emoji:"🧴", block:"pm" },
-      { key:"tongue",       label:"Tongue",              points:1,  emoji:"👅", block:"pm" },
-      { key:"sweets",       label:"Ate Sweets",         points:-5, emoji:"🍬", penalty:true },
-    ];
+const STRETCHES = [
+  { key: "calves",     label: "Calves",     duration: 180, icon: "◎", tip: "Lean into wall, heel flat on floor" },
+  { key: "quads",      label: "Quads",      duration: 180, icon: "◈", tip: "Standing, pull foot to glute" },
+  { key: "hamstrings", label: "Hamstrings", duration: 180, icon: "◇", tip: "Seated forward fold, reach for toes" },
+  { key: "hips",       label: "Hips",       duration: 180, icon: "◉", tip: "Pigeon pose or figure-4" },
+];
 
-    const BLOCKS = [
-      { id:"am",  label:"MORNING",   emoji:"🌅", color:"#f59e0b" },
-      { id:"mid", label:"MIDDAY",    emoji:"☀️",  color:"#3b82f6" },
-      { id:"pm",  label:"EVENING",   emoji:"🌙", color:"#a855f7" },
-    ];
+const WORKOUT_TYPES = ["run", "chest", "legs", "shoulders", "back", "biceps", "triceps", "vacation"];
+const ICON = { run: "⚡", chest: "💪", legs: "🦵", shoulders: "🏋️", back: "🔱", biceps: "💥", triceps: "⚙️", vacation: "🏖️" };
 
-    const WEEKDAY_GOAL = 100;
-    const WEEKEND_GOAL = 75;
-    const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function scoreColor(s) {
+  if (!s) return "#444";
+  const n = parseInt(s);
+  if (n >= 85) return "#3a9e4f";
+  if (n >= 70) return "#c49a1a";
+  return "#c0392b";
+}
+function scoreLabel(s) {
+  const n = parseInt(s);
+  if (n >= 85) return "OPTIMAL";
+  if (n >= 70) return "GOOD";
+  if (n >= 55) return "FAIR";
+  return "LOW";
+}
 
-    function isWeekend(d) { const day=new Date(d+"T12:00:00").getDay(); return day===0||day===6; }
-    function getTodayStr() { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
-    function formatDate(d) { const dt=new Date(d+"T12:00:00"); return `${DAYS[dt.getDay()]} ${dt.toLocaleDateString("en-US",{month:"short",day:"numeric"})}`; }
-    function formatShort(d) { const dt=new Date(d+"T12:00:00"); return dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}); }
-    function getCatPoints(cat,e) { if(cat.multi) return typeof e[cat.key]==="number"?e[cat.key]:0; return e[cat.key]?cat.points:0; }
-    function getDayTotal(cats,e) { return cats.reduce((s,c)=>s+getCatPoints(c,e),0); }
-    function lsGet(k,fb) { try{const v=localStorage.getItem(k);return v?JSON.parse(v):fb;}catch{return fb;} }
-    function lsSet(k,v) { try{localStorage.setItem(k,JSON.stringify(v));}catch{} }
-    function getCurrentBlock() {
-      const h=new Date().getHours();
-      if(h<11) return "am";
-      if(h<18) return "mid";
-      return "pm";
+// ── Shared styles ──────────────────────────────────────────────────────────
+const g = {
+  page:     { padding: "24px 16px 0" },
+  label:    { fontSize: 9, letterSpacing: 4, textTransform: "uppercase", color: "#888", marginBottom: 12, marginTop: 0, display: "block" },
+  card:     { background: "#141414", border: "1px solid #1e1e1e", borderRadius: 10, marginBottom: 10, overflow: "hidden" },
+  input:    { background: "#0f0f0f", border: "1px solid #252525", color: "#e8e0d5", padding: "10px 12px", borderRadius: 6, fontSize: 14, fontFamily: "'DM Mono', monospace", width: "100%", boxSizing: "border-box", outline: "none" },
+  numInput: { background: "#0f0f0f", border: "1px solid #252525", color: "#e8e0d5", padding: "9px 6px", borderRadius: 5, fontSize: 14, fontFamily: "'DM Mono', monospace", width: "100%", boxSizing: "border-box", textAlign: "center", outline: "none" },
+  primary:  { background: "#ff4d00", border: "none", color: "#fff", padding: "14px 20px", borderRadius: 8, cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 3, textTransform: "uppercase", width: "100%", marginBottom: 10, display: "block" },
+  ghost:    { background: "none", border: "1px solid #252525", color: "#666", padding: "7px 12px", borderRadius: 5, cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: "uppercase" },
+  altBtn:   { background: "#191919", border: "1px solid #252525", color: "#bbb", padding: "9px 12px", borderRadius: 5, cursor: "pointer", fontSize: 11, fontFamily: "'DM Mono', monospace", display: "block", width: "100%", textAlign: "left", marginBottom: 6 },
+  badge:    { background: "#1e1e1e", color: "#888", fontSize: 9, letterSpacing: 2, textTransform: "uppercase", padding: "3px 8px", borderRadius: 3, border: "1px solid #252525" },
+};
+
+const Bar = ({ value, max, color = "#ff4d00" }) => (
+  <div style={{ height: 2, background: "#1e1e1e", borderRadius: 2, overflow: "hidden" }}>
+    <div style={{ height: "100%", width: `${Math.min((value / max) * 100, 100)}%`, background: color, transition: "width 0.4s ease" }} />
+  </div>
+);
+
+// ── Stretch Timer ──────────────────────────────────────────────────────────
+function StretchTimer({ stretch, completed, onComplete }) {
+  const [timeLeft, setTimeLeft] = useState(stretch.duration);
+  const [running, setRunning] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (running && timeLeft > 0) {
+      ref.current = setInterval(() => {
+        setTimeLeft(t => { if (t <= 1) { clearInterval(ref.current); setRunning(false); onComplete(); return 0; } return t - 1; });
+      }, 1000);
     }
-    function isMidday() { const h=new Date().getHours(); return h>=11&&h<14; }
-    function isSaturday() { return new Date().getDay()===6; }
+    return () => clearInterval(ref.current);
+  }, [running]);
 
-    function buildOrderedCats(savedOrder, savedBlocks) {
-      const map = Object.fromEntries(DEFAULT_CATEGORIES.map(c=>[c.key,c]));
-      // Apply any custom block overrides
-      if (savedBlocks) {
-        Object.entries(savedBlocks).forEach(([key,block]) => { if(map[key]) map[key]={...map[key],block}; });
-      }
-      if (!savedOrder || !savedOrder.length) return Object.values(map);
-      const ordered = savedOrder.map(k=>map[k]).filter(Boolean);
-      const missing = DEFAULT_CATEGORIES.filter(c=>!savedOrder.includes(c.key)).map(c=>map[c.key]);
-      return [...ordered, ...missing];
-    }
+  const reset = () => { clearInterval(ref.current); setRunning(false); setTimeLeft(stretch.duration); };
+  const pct = ((stretch.duration - timeLeft) / stretch.duration) * 100;
+  const circ = 2 * Math.PI * 26;
 
-    // ── Bar Chart ─────────────────────────────────────────────────────────────
-    function BarChart({ data, height=120 }) {
-      if (!data.length) return null;
-      const W=Math.min(window.innerWidth-64,420);
-      const barW=Math.max(4,Math.floor((W-data.length*2)/data.length));
-      const maxVal=Math.max(...data.map(d=>d.val),1);
-      const chartH=height-20;
-      return (
-        <svg width={W} height={height} style={{overflow:"visible"}}>
-          {data.map((d,i)=>{ const x=i*(barW+2); const barH=Math.max(2,Math.round((d.val/maxVal)*chartH)); const color=d.hit?"#22c55e":d.val>=d.goal*0.8?"#f59e0b":"#3b3b50"; return <rect key={d.date} x={x} y={chartH-barH} width={barW} height={barH} rx="2" fill={color} opacity="0.85"/>; })}
-          {(()=>{ const avg=data.reduce((s,d)=>s+d.val,0)/data.length; const avgY=chartH-Math.round((avg/maxVal)*chartH); return <line x1={0} y1={avgY} x2={data.length*(barW+2)-2} y2={avgY} stroke="#3b82f6" strokeWidth="1" strokeDasharray="3 3" opacity="0.6"/>; })()}
+  return (
+    <div style={{ background: completed ? "#0b180b" : "#141414", border: `1px solid ${completed ? "#1a4020" : running ? "#ff4d00" : "#1e1e1e"}`, borderRadius: 10, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, transition: "all 0.3s" }}>
+      <div style={{ position: "relative", width: 58, height: 58, flexShrink: 0 }}>
+        <svg width="58" height="58" style={{ transform: "rotate(-90deg)" }}>
+          <circle cx="29" cy="29" r="26" fill="none" stroke="#1e1e1e" strokeWidth="3.5" />
+          <circle cx="29" cy="29" r="26" fill="none" stroke={completed ? "#3a9e4f" : running ? "#ff4d00" : "#2a2a2a"} strokeWidth="3.5" strokeDasharray={circ} strokeDashoffset={circ * (1 - pct / 100)} strokeLinecap="round" style={{ transition: "stroke-dashoffset 1s linear" }} />
         </svg>
-      );
-    }
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: completed ? 18 : 10, color: completed ? "#3a9e4f" : running ? "#ff4d00" : "#555", fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
+          {completed ? "✓" : `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, "0")}`}
+        </div>
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 12, letterSpacing: 2, textTransform: "uppercase", color: completed ? "#3a9e4f" : "#ccc", marginBottom: 3, fontWeight: 600 }}>{stretch.label}</div>
+        <div style={{ fontSize: 10, color: "#777", marginBottom: 10 }}>{stretch.tip}</div>
+        <div style={{ display: "flex", gap: 7 }}>
+          {!completed && <button onClick={() => setRunning(r => !r)} style={{ ...g.ghost, background: running ? "none" : "#ff4d00", borderColor: running ? "#252525" : "#ff4d00", color: running ? "#666" : "#fff", fontSize: 9, padding: "5px 12px" }}>{running ? "PAUSE" : timeLeft < stretch.duration ? "RESUME" : "START"}</button>}
+          {timeLeft < stretch.duration && !completed && <button onClick={reset} style={{ ...g.ghost, fontSize: 9, padding: "5px 10px" }}>↺</button>}
+          {!completed && <button onClick={onComplete} style={{ ...g.ghost, borderColor: "#1a4020", color: "#3a9e4f", fontSize: 9, padding: "5px 10px" }}>DONE</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-    // ── Category Drill ────────────────────────────────────────────────────────
-    function CategoryDrillChart({ cat, entries, onBack }) {
-      const sorted=Object.keys(entries).sort();
-      const data=sorted.map(date=>{ const e=entries[date]||{}; const earned=getCatPoints(cat,e); return {date,earned,did:cat.multi?earned>0:!!e[cat.key]}; });
-      const daysDid=data.filter(d=>d.did).length;
-      const pct=data.length?Math.round((daysDid/data.length)*100):0;
-      const streak=(()=>{ let s=0; for(let i=data.length-1;i>=0;i--){ if(data[i].did)s++; else break; } return s; })();
-      const last30=data.slice(-30);
-      const W=Math.min(window.innerWidth-64,420);
-      const barW=Math.max(4,Math.floor((W-last30.length*2)/last30.length));
-      const maxVal=cat.multi?Math.max(...(MULTI_CATEGORIES[cat.key]?.options||[]).map(o=>o.value),1):1;
-      return (
-        <div>
-          <div style={{padding:"16px 20px 0"}}><button className="back-btn" onClick={onBack}>← BACK</button></div>
-          <div style={{margin:"12px 16px 0",background:"linear-gradient(145deg,#13131c,#1a1a28)",border:"1px solid #23233a",borderRadius:16,padding:"20px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-              <span style={{fontSize:28}}>{cat.emoji}</span>
-              <div><div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color:"#fff"}}>{cat.label}</div><div style={{fontSize:10,color:"#555",letterSpacing:"0.1em",marginTop:2}}>{cat.points>0?`+${cat.points}`:`${cat.points}`} PTS PER DAY</div></div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
-              {[{label:"COMPLETION",val:`${pct}%`},{label:"DAYS DONE",val:daysDid},{label:"STREAK",val:`${streak}d`}].map(s=>(
-                <div key={s.label} style={{background:"#0f0f13",borderRadius:10,padding:"10px 12px"}}><div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:"#fff"}}>{s.val}</div><div style={{fontSize:9,color:"#444",letterSpacing:"0.12em",marginTop:2}}>{s.label}</div></div>
-              ))}
-            </div>
+// ── VOICE DICTATION ────────────────────────────────────────────────────────
+function VoiceFill({ tab, onFill }) {
+  const [listening, setListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [status, setStatus] = useState("");
+  const [mode, setMode] = useState(tab === "sleep" ? "text" : "voice"); // default to text for sleep
+  const [textInput, setTextInput] = useState("");
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
+  const recRef = useRef(null);
+
+  const startListening = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setStatus("error"); setTranscript("Speech recognition not supported in this browser."); return; }
+    const rec = new SR();
+    rec.lang = "en-US";
+    rec.continuous = false;
+    rec.interimResults = false;
+    recRef.current = rec;
+    rec.onstart = () => { setListening(true); setStatus("listening"); setTranscript(""); };
+    rec.onresult = (e) => {
+      const text = e.results[0][0].transcript;
+      setTranscript(text);
+      parseWithClaude(text);
+    };
+    rec.onerror = () => { setListening(false); setStatus("error"); };
+    rec.onend = () => setListening(false);
+    rec.start();
+  };
+
+  const stopListening = () => {
+    recRef.current?.stop();
+    setListening(false);
+  };
+
+  const parseWithClaude = async (text) => {
+    setParsing(true);
+    setStatus("parsing");
+    const prompts = {
+      daily: `Extract daily fitness data from this text and return ONLY valid JSON with these optional fields:
+{"steps": number, "crunches": number, "planks": number, "pushups": number, "stretches": ["calves"|"quads"|"hamstrings"|"hips"]}
+Accept any natural format like "100 crunches", "did 3 planks", "50 push-ups", "8500 steps", "stretched calves and quads", "did all stretches".
+If they mention all stretches or full stretch routine, include all four: ["calves","quads","hamstrings","hips"].
+Text: "${text}"
+Return only JSON, no explanation.`,
+      sleep: `Extract Oura sleep/recovery data from this text and return ONLY valid JSON with these optional fields:
+{"sleepScore": number, "readiness": number, "hoursSlept": string, "rem": string, "heartRate": number, "hrv": number, "respiratoryRate": number}
+
+Rules:
+- hoursSlept and rem: convert any format to H:MM (e.g. "6h 3m" → "6:03", "1h 7m" → "1:07", "6:12" stays "6:12")
+- sleepScore: look for "sleep score", "sleep 78", or just a number near "sleep"
+- readiness: look for "readiness", "ready", "readiness score"
+- heartRate: look for "HR", "heart rate", "resting HR", "resting heart rate"
+- hrv: look for "HRV"
+- respiratoryRate: look for "resp", "respiratory", "breathing"
+- Accept any order, any abbreviation, any format
+
+Examples that should all work:
+"sleep 78 ready 72 hrv 44 hr 51 6:03 sleep 1:07 rem resp 15.1"
+"Sleep score 78, Readiness 72, HRV 44, HR 51, 6h 3m total, 1h 7m REM, resp 15.1"
+"78/72 hrv44 hr51 6h3m 1h7m rem"
+
+Text: "${text}"
+Return only JSON, no explanation.`,
+      workout: `Parse this workout log into JSON. Return ONLY valid JSON, no explanation, no markdown.
+Format: {"exercises": [{"name": string, "sets": [{"reps": number, "weight": number}]}]}
+For a line like "4x8x315" create 4 sets each with reps=8 weight=315.
+For "1x8x225" create 1 set with reps=8 weight=225.
+Group sets under the exercise name that appears above them.
+
+Workout log:
+${text}
+
+Return only the JSON object.`
+    };
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1500,
+          messages: [{ role: "user", content: prompts[tab] }]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content?.[0]?.text || "{}";
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      onFill(parsed);
+      setStatus("done");
+    } catch(e) {
+      setStatus("error");
+    }
+    setParsing(false);
+  };
+
+  const parseWithImage = async (base64Data, mediaType) => {
+    setParsing(true);
+    setStatus("parsing");
+    const imagePrompt = tab === "sleep"
+      ? `This is a screenshot from the Oura Ring app showing sleep and recovery data. Extract all visible metrics and return ONLY valid JSON:
+{"sleepScore": number, "readiness": number, "hoursSlept": string, "rem": string, "heartRate": number, "hrv": number, "respiratoryRate": number}
+hoursSlept and rem should be in H:MM format (e.g. "6:12", "1:24").
+Return only JSON, no explanation.`
+      : `Extract any fitness or health data visible in this screenshot and return ONLY valid JSON.
+Return only JSON, no explanation.`;
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 500,
+          messages: [{ role: "user", content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
+            { type: "text", text: imagePrompt }
+          ]}]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content?.[0]?.text || "{}";
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      onFill(parsed);
+      setStatus("done");
+    } catch(e) {
+      setStatus("error");
+    }
+    setParsing(false);
+  };
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const mediaType = file.type || "image/jpeg";
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const base64 = ev.target.result.split(",")[1];
+      setImagePreview(ev.target.result);
+      parseWithImage(base64, mediaType);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const statusColors = { listening: "#ff4d00", parsing: "#c49a1a", done: "#3a9e4f", error: "#c0392b" };
+  const statusLabels = { listening: "● LISTENING…", parsing: "⟳ PARSING…", done: "✓ FIELDS FILLED", error: "✕ TRY AGAIN" };
+
+  const modes = tab === "sleep"
+    ? ["voice", "text", "image"]
+    : ["voice", "text"];
+
+  return (
+    <div style={{ ...g.card, padding: "12px 14px", marginBottom: 14 }}>
+      {/* Mode toggle */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+        {modes.map(m => (
+          <button key={m} onClick={() => { setMode(m); setStatus(""); setTranscript(""); setTextInput(""); setImagePreview(null); }}
+            style={{ padding: "4px 10px", borderRadius: 4, border: `1px solid ${mode === m ? "#ff4d00" : "#252525"}`, background: mode === m ? "#1c1008" : "none", color: mode === m ? "#ff4d00" : "#555", fontSize: 8, letterSpacing: 2, textTransform: "uppercase", cursor: "pointer", fontFamily: "'DM Mono', monospace" }}>
+            {m === "voice" ? "🎙 VOICE" : m === "text" ? "✏ TYPE" : "📷 IMAGE"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "voice" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            onClick={listening ? stopListening : startListening}
+            style={{
+              width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
+              background: listening ? "#ff4d00" : "#1a1a1a",
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              boxShadow: listening ? "0 0 0 6px rgba(255,77,0,0.15)" : "none",
+              transition: "all 0.3s"
+            }}>
+            <span style={{ fontSize: 20 }}>{listening ? "⏹" : "🎙️"}</span>
+          </button>
+          <div style={{ flex: 1 }}>
+            {!status && <span style={{ fontSize: 9, letterSpacing: 3, color: "#555", textTransform: "uppercase" }}>Tap to dictate</span>}
+            {status && <span style={{ fontSize: 9, letterSpacing: 2, color: statusColors[status], textTransform: "uppercase" }}>{statusLabels[status]}</span>}
+            {transcript && <div style={{ fontSize: 10, color: "#666", marginTop: 4, lineHeight: 1.5 }}>"{transcript}"</div>}
           </div>
-          {last30.length>0&&(
-            <div style={{margin:"12px 16px 0",background:"#13131c",border:"1px solid #1e1e2e",borderRadius:14,padding:"16px"}}>
-              <div className="section-label" style={{marginBottom:12}}>LAST {last30.length} DAYS</div>
-              {cat.multi?(
-                <svg width={Math.min(window.innerWidth-64,420)} height={80} style={{overflow:"visible"}}>
-                  {last30.map((d,i)=>{ const x=i*(barW+2); const barH=Math.max(2,Math.round((d.earned/Math.max(maxVal,1))*60)); return <rect key={d.date} x={x} y={60-barH} width={barW} height={barH} rx="2" fill={d.did?"#22c55e":"#1e1e2e"} opacity="0.9"/>; })}
-                </svg>
-              ):(
-                <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                  {last30.map(d=><div key={d.date} style={{width:16,height:16,borderRadius:4,background:d.did?"#22c55e":"#1e1e2e",border:"1px solid",borderColor:d.did?"#22c55e33":"#2a2a3a"}}/>)}
-                </div>
-              )}
+          {status && <button onClick={() => { setStatus(""); setTranscript(""); }} style={{ ...g.ghost, fontSize: 9, padding: "4px 8px" }}>✕</button>}
+        </div>
+      )}
+
+      {mode === "text" && (
+        <div>
+          <textarea
+            placeholder={tab === "workout"
+              ? "e.g.\nOverhead Press 4x8 @ 135\nTricep Pulldown 4x8 @ 57.5\nDips 4x8 @ 175"
+              : tab === "sleep"
+              ? "e.g.\nsleep 78 ready 72 hrv 44 hr 51\n6:03 sleep  1:07 rem  resp 15.1\n\nAny format works — any order"
+              : "e.g.\n100 crunches, 3 planks, 50 push-ups\n8500 steps\nstretched calves and quads"}
+            value={textInput}
+            onChange={e => setTextInput(e.target.value)}
+            style={{ ...g.input, width: "100%", minHeight: 90, resize: "vertical", fontSize: 11, lineHeight: 1.6, padding: "10px", boxSizing: "border-box", fontFamily: "system-ui, sans-serif" }}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+            <button
+              onPointerDown={e => e.preventDefault()}
+              onClick={() => { if (textInput.trim()) parseWithClaude(textInput.trim()); }}
+              disabled={parsing || !textInput.trim()}
+              style={{ ...g.primary, padding: "9px 16px", fontSize: 9, letterSpacing: 2, flex: 1, opacity: textInput.trim() ? 1 : 0.4 }}>
+              {parsing ? "⟳ PARSING…" : "AUTO-FILL ✦"}
+            </button>
+            {status && <span style={{ fontSize: 9, color: statusColors[status], letterSpacing: 1 }}>{statusLabels[status]}</span>}
+            {status && <button onClick={() => { setStatus(""); setTextInput(""); }} style={{ ...g.ghost, fontSize: 9, padding: "4px 8px" }}>✕</button>}
+          </div>
+        </div>
+      )}
+
+      {mode === "image" && (
+        <div>
+          <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageSelect} />
+          {!imagePreview && !parsing && (
+            <button onClick={() => fileInputRef.current?.click()}
+              style={{ ...g.card, width: "100%", padding: "24px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, cursor: "pointer", border: "1px dashed #252525", background: "#0a0a0a" }}>
+              <span style={{ fontSize: 28 }}>📷</span>
+              <span style={{ fontSize: 9, color: "#555", letterSpacing: 2, textTransform: "uppercase" }}>Tap to select Oura screenshot</span>
+              <span style={{ fontSize: 8, color: "#333" }}>Sleep summary, readiness, or full report</span>
+            </button>
+          )}
+          {imagePreview && (
+            <div style={{ position: "relative", marginBottom: 8 }}>
+              <img src={imagePreview} alt="Oura screenshot" style={{ width: "100%", borderRadius: 6, opacity: parsing ? 0.4 : 1 }} />
+              {!parsing && <button onClick={() => { setImagePreview(null); setStatus(""); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                style={{ position: "absolute", top: 6, right: 6, background: "#0a0a0a", border: "1px solid #252525", color: "#888", borderRadius: 4, padding: "3px 7px", cursor: "pointer", fontSize: 10 }}>✕</button>}
             </div>
           )}
-          <div style={{padding:"12px 16px 32px"}}>
-            <div className="section-label" style={{marginBottom:8}}>ALL ENTRIES</div>
-            {[...data].reverse().map(d=>(
-              <div key={d.date} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 4px",borderBottom:"1px solid #13131c"}}>
-                <div style={{width:8,height:8,borderRadius:"50%",background:d.did?"#22c55e":"#2a2a3a",flexShrink:0}}/>
-                <div style={{flex:1,fontSize:12,color:"#888"}}>{formatDate(d.date)}</div>
-                <div style={{fontSize:13,fontWeight:500,color:d.did?"#22c55e":"#333"}}>{cat.multi?(d.earned>0?`+${d.earned}`:"—"):(d.did?`+${cat.points}`:"—")}</div>
+          {parsing && (
+            <div style={{ textAlign: "center", padding: "12px 0", fontSize: 9, color: "#c49a1a", letterSpacing: 2 }}>⟳ READING IMAGE…</div>
+          )}
+          {status === "done" && (
+            <div style={{ fontSize: 9, color: "#3a9e4f", letterSpacing: 1, textAlign: "center", marginTop: 6 }}>✓ FIELDS FILLED</div>
+          )}
+          {status === "error" && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+              <span style={{ fontSize: 9, color: "#c0392b" }}>✕ Couldn't read image — try TYPE mode</span>
+              <button onClick={() => { setImagePreview(null); setStatus(""); }} style={{ ...g.ghost, fontSize: 9, padding: "3px 7px" }}>↺</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── QUICK FILL BAR ─────────────────────────────────────────────────────────
+function QuickFillBar({ onApply, vacationMode }) {
+  const [sets, setSets] = useState("");
+  const [reps, setReps] = useState("");
+  const [weight, setWeight] = useState("");
+  const [applied, setApplied] = useState(false);
+  const onApplyRef = useRef(onApply);
+  useEffect(() => { onApplyRef.current = onApply; });
+
+  const apply = () => {
+    const n = Math.max(1, parseInt(sets) || 1);
+    onApplyRef.current(n, reps, weight);
+    setApplied(true);
+    setSets(""); setReps(""); setWeight("");
+    setTimeout(() => setApplied(false), 2000);
+  };
+
+  return (
+    <div style={{ background: "#0e0e0e", border: "1px solid #1a1a1a", borderRadius: 6, padding: "10px 10px", marginBottom: 12 }}>
+      <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase", marginBottom: 8 }}>Quick Fill</div>
+      <div style={{ display: "grid", gridTemplateColumns: vacationMode ? "1fr 1fr auto" : "1fr 1fr 1fr auto", gap: 6, alignItems: "flex-end" }}>
+        <div>
+          <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Sets</div>
+          <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="4" min="1" max="20"
+            value={sets} onChange={e => { setSets(e.target.value); setApplied(false); }}
+            onBlur={e => setSets(e.target.value)} />
+        </div>
+        <div>
+          <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Reps</div>
+          <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="8"
+            value={reps} onChange={e => { setReps(e.target.value); setApplied(false); }}
+            onBlur={e => setReps(e.target.value)} />
+        </div>
+        {!vacationMode && (
+          <div>
+            <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Lbs</div>
+            <input style={{ ...g.numInput, fontSize: 13 }} type="number" placeholder="135"
+              value={weight} onChange={e => { setWeight(e.target.value); setApplied(false); }}
+              onBlur={e => setWeight(e.target.value)} />
+          </div>
+        )}
+        <button onPointerDown={e => e.preventDefault()} onClick={apply} style={{
+          background: applied ? "#0b180b" : "#ff4d00",
+          border: applied ? "1px solid #1a4020" : "none",
+          color: applied ? "#3a9e4f" : "#fff",
+          padding: "0 10px", borderRadius: 5, cursor: "pointer",
+          fontFamily: "'DM Mono', monospace", fontSize: 9,
+          height: 36, whiteSpace: "nowrap", transition: "all 0.2s"
+        }}>
+          {applied ? "✓" : "FILL"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── WORKOUT TAB ────────────────────────────────────────────────────────────
+function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, setDailyLog, saveDailyEntry, sleepLog, needsReminder, needsDailyLog, needsStretches, onGoToDaily }) {
+  const [mode, setMode] = useState("pick"); // pick | preview | log
+  const [workoutType, setWorkoutType] = useState(null);
+  const [exercises, setExercises] = useState([]);
+  const [runData, setRunData] = useState({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "", location: "", feel: "", stopReason: "", notes: "" });
+  const [showAlts, setShowAlts] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const [draftId] = useState(() => "draft_" + Date.now());
+  const [completionModal, setCompletionModal] = useState(null); // { todayVol, lastVol, lastDate, prs }
+  const [postWorkoutDaily, setPostWorkoutDaily] = useState({ crunches: "", planks: "", pushups: "" });
+  const [postStretch, setPostStretch] = useState({});
+  const autoSaveTimer = useRef(null);
+
+  // Auto-save draft to localStorage whenever exercises change
+  useEffect(() => {
+    if (mode !== "log" || !workoutType || workoutType === "run") return;
+    clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      const draft = { workoutType, exercises, savedAt: new Date().toISOString() };
+      localStorage.setItem("rep_draft", JSON.stringify(draft));
+    }, 800);
+  }, [exercises, mode, workoutType]);
+
+  // Restore draft on mount if one exists
+  const [showDraftBanner, setShowDraftBanner] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState(null);
+  useEffect(() => {
+    const raw = localStorage.getItem("rep_draft");
+    if (raw) {
+      try {
+        const draft = JSON.parse(raw);
+        if (draft.exercises?.length > 0) {
+          setPendingDraft(draft);
+          setShowDraftBanner(true);
+        }
+      } catch(e) {}
+    }
+  }, []);
+
+  const restoreDraft = () => {
+    if (!pendingDraft) return;
+    setWorkoutType(pendingDraft.workoutType);
+    setExercises(pendingDraft.exercises);
+    setMode("log");
+    setShowDraftBanner(false);
+  };
+
+  const discardDraft = () => {
+    localStorage.removeItem("rep_draft");
+    setShowDraftBanner(false);
+    setPendingDraft(null);
+  };
+
+  const getLastSession = (type) => history.find(h => h.type === type) || null;
+
+  const startWorkout = (type) => {
+    setWorkoutType(type);
+    if (type !== "run") setExercises(EXERCISE_DB[type].staples.map(n => ({ name: n, sets: [{ reps: "", weight: "" }] })));
+    else setRunData({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "", location: "", feel: "", stopReason: "", notes: "" });
+    setMode("preview");
+    setSaved(false);
+    localStorage.removeItem("rep_draft");
+  };
+
+  const launchWorkout = () => setMode("log");
+
+  const [workoutDate, setWorkoutDate] = useState(() => new Date().toLocaleDateString("en-CA"));
+
+  const addSet = (i) => setExercises(prev => prev.map((ex, idx) => idx === i ? { ...ex, sets: [...ex.sets, { reps: "", weight: "" }] } : ex));
+  const updateSet = (i, j, f, v) => setExercises(prev => prev.map((ex, idx) => idx !== i ? ex : { ...ex, sets: ex.sets.map((s, si) => si !== j ? s : { ...s, [f]: v }) }));
+  const updateName = (i, v) => { const u = [...exercises]; u[i].name = v; setExercises(u); };
+  const removeExercise = (i) => setExercises(exercises.filter((_, idx) => idx !== i));
+  const replaceWithAlt = (i, name) => { const u = [...exercises]; u[i].name = name; setExercises(u); setShowAlts(null); };
+
+  const saveWorkout = async () => {
+    const displayDate = new Date(workoutDate + "T12:00:00").toLocaleDateString();
+    const entry = { id: Date.now(), date: displayDate, type: workoutType, ...(workoutType === "run" ? { runData } : { exercises }) };
+
+    // Build completion stats for modal
+    if (workoutType !== "run" && exercises.length) {
+      const lastSession = getLastSession(workoutType);
+      const calcVol = (exList) => (exList || []).reduce((a, ex) =>
+        a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) =>
+          b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0);
+      const todayVol = calcVol(exercises);
+      const lastVol = lastSession ? calcVol(lastSession.exercises) : 0;
+
+      // Find PRs
+      const prs = [];
+      exercises.forEach(ex => {
+        const todayMax = Math.max(0, ...ex.sets.filter(s => s.weight).map(s => parseFloat(s.weight)||0));
+        if (!todayMax) return;
+        let prevMax = 0;
+        history.forEach(session => {
+          (session.exercises || []).forEach(pex => {
+            if (pex.name?.toLowerCase() === ex.name?.toLowerCase()) {
+              const m = Math.max(0, ...pex.sets.filter(s => s.weight).map(s => parseFloat(s.weight)||0));
+              if (m > prevMax) prevMax = m;
+            }
+          });
+        });
+        if (todayMax > prevMax && prevMax > 0) prs.push({ name: ex.name, weight: todayMax, prev: prevMax });
+      });
+      setCompletionModal({
+        todayVol, lastVol, lastDate: lastSession?.date, prs, type: workoutType,
+        saveDaily: async (dailyData, stretches) => {
+          const today = new Date().toLocaleDateString();
+          const entry = { id: Date.now(), date: today, ...dailyData, stretches: Object.keys(stretches).filter(k => stretches[k]) };
+          setDailyLog(prev => [entry, ...prev]);
+          await saveDailyEntry(entry);
+        }
+      });
+    }
+
+    const newH = [entry, ...history];
+    setHistory(newH);
+    await saveEntry(entry);
+    localStorage.removeItem("rep_draft");
+    setSaved(true);
+  };
+
+  const deleteWorkout = async (id) => {
+    await deleteEntry(id);
+  };
+
+  const totalSets = exercises.reduce((a, e) => a + e.sets.filter(s => s.reps || s.weight).length, 0);
+
+  // Find last time each exercise was performed
+  const getLastPerformance = (exName) => {
+    if (!exName) return null;
+    const name = exName.trim().toLowerCase();
+    for (const session of history) {
+      if (!session.exercises) continue;
+      const match = session.exercises.find(e => e.name?.trim().toLowerCase() === name);
+      if (match && match.sets?.length) {
+        // Find best set (highest weight with reps)
+        const filledSets = match.sets.filter(s => s.reps || s.weight);
+        if (!filledSets.length) continue;
+        const best = filledSets.reduce((a, b) => {
+          const wa = parseFloat(a.weight) || 0, wb = parseFloat(b.weight) || 0;
+          const ra = parseFloat(a.reps) || 0, rb = parseFloat(b.reps) || 0;
+          return (wb * rb) >= (wa * ra) ? b : a;
+        });
+        const totalVol = filledSets.reduce((a, s) => a + ((parseFloat(s.weight)||0) * (parseFloat(s.reps)||0)), 0);
+        return { weight: best.weight, reps: best.reps, sets: filledSets.length, totalVol, date: session.date };
+      }
+    }
+    return null;
+  };
+  const lastRun = history.find(h => h.type === "run");
+
+  if (mode === "pick") return (
+    <div style={g.page}>
+      {showDraftBanner && pendingDraft && (
+        <div style={{ background: "#0d1f0d", border: "1px solid #1a4020", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
+          <div style={{ fontSize: 9, letterSpacing: 2, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 6 }}>◉ Unsaved Workout Found</div>
+          <div style={{ fontSize: 11, color: "#888", marginBottom: 10 }}>
+            {pendingDraft.workoutType} · {pendingDraft.exercises?.reduce((a, e) => a + e.sets.filter(s => s.reps || s.weight).length, 0)} sets logged · {new Date(pendingDraft.savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={restoreDraft} style={{ ...g.primary, flex: 2, padding: "9px 0", fontSize: 9 }}>↺ RESTORE</button>
+            <button onClick={discardDraft} style={{ ...g.ghost, flex: 1, padding: "9px 0", fontSize: 9, color: "#555" }}>DISCARD</button>
+          </div>
+        </div>
+      )}
+      <WhatsNext history={history} onSelect={(type) => startWorkout(type)} />
+
+      {needsReminder && (
+        <div onClick={onGoToDaily} style={{ background: "#1a0d00", border: "1px solid #3a1a00", borderRadius: 8, padding: "10px 14px", marginBottom: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <div style={{ fontSize: 8, letterSpacing: 2, color: "#ff4d00", textTransform: "uppercase", marginBottom: 3 }}>● Today's Log Incomplete</div>
+            <div style={{ fontSize: 9, color: "#666" }}>
+              {[needsDailyLog && "crunches", needsStretches && "stretches"].filter(Boolean).join(" + ")} not logged yet
+            </div>
+          </div>
+          <span style={{ fontSize: 11, color: "#ff4d00" }}>→</span>
+        </div>
+      )}
+
+      <span style={g.label}>Choose Workout</span>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 28 }}>
+        {WORKOUT_TYPES.map(t => (
+          <button key={t} onClick={() => startWorkout(t)} style={{
+            background: "#141414", border: "1px solid #1e1e1e", color: "#e8e0d5", padding: "20px 10px",
+            borderRadius: 10, cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 10,
+            letterSpacing: 3, textTransform: "uppercase", display: "flex", flexDirection: "column",
+            alignItems: "center", gap: 9, transition: "all 0.15s"
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#ff4d00"; e.currentTarget.style.background = "#1c1008"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e1e1e"; e.currentTarget.style.background = "#141414"; }}
+          >
+            <span style={{ fontSize: 26 }}>{ICON[t]}</span>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {history.length > 0 && (
+        <>
+          <span style={g.label}>Recent</span>
+          {history.slice(0, 4).map(h => (
+            <div key={h.id} style={{ ...g.card, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 13 }}>{ICON[h.type]} <span style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "#888", marginLeft: 6 }}>{h.type}</span></span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={g.badge}>{h.date}</span>
+                {h.exercises && <span style={{ fontSize: 10, color: "#888" }}>{h.exercises.reduce((a, e) => a + e.sets.length, 0)} sets</span>}
+                {h.type === "run" && h.runData?.distance && <span style={{ fontSize: 10, color: "#888" }}>{h.runData.distance} mi</span>}
+                <button onClick={() => deleteWorkout(h.id)} style={{ background: "none", border: "1px solid #252525", color: "#888", padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono', monospace" }}>✕</button>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+
+  // ── Preview mode ──
+  if (mode === "preview") {
+    const lastSession = getLastSession(workoutType);
+    const lastExercises = lastSession?.exercises || [];
+    return (
+      <div style={g.page}>
+        {/* Completion modal overlay */}
+        {completionModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "24px 20px", width: "100%", maxWidth: 380 }}>
+              <div style={{ fontSize: 10, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase", marginBottom: 16 }}>✓ Session Complete</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#e8e0d5", fontFamily: "'DM Mono', monospace" }}>{Math.round(completionModal.todayVol).toLocaleString()}</div>
+                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>TODAY LBS</div>
+                </div>
+                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: completionModal.todayVol >= completionModal.lastVol ? "#3a9e4f" : "#c0392b", fontFamily: "'DM Mono', monospace" }}>
+                    {completionModal.lastVol ? `${completionModal.todayVol >= completionModal.lastVol ? "+" : ""}${Math.round(((completionModal.todayVol - completionModal.lastVol) / completionModal.lastVol) * 100)}%` : "—"}
+                  </div>
+                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>VS LAST · {completionModal.lastDate || "N/A"}</div>
+                </div>
+              </div>
+              {completionModal.prs.length > 0 && (
+                <div style={{ background: "#0a1a0a", border: "1px solid #1a4020", borderRadius: 8, padding: "10px 12px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 8, letterSpacing: 2, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 8 }}>🏆 New PRs</div>
+                  {completionModal.prs.map((pr, i) => (
+                    <div key={i} style={{ fontSize: 10, color: "#ccc", marginBottom: 4 }}>
+                      {pr.name} — <span style={{ color: "#3a9e4f", fontWeight: 700 }}>{pr.weight} lbs</span> <span style={{ color: "#444" }}>(prev {pr.prev})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Post-workout crunches + stretches */}
+              <div style={{ background: "#0f0f0f", border: "1px solid #1a1a1a", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+                <div style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 10 }}>Log Crunches & Stretches</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+                  {[["crunches","✦","Crunches"],["planks","◆","Planks"],["pushups","▲","Push-Ups"]].map(([f,icon,lbl]) => (
+                    <div key={f} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 12, marginBottom: 3 }}>{icon}</div>
+                      <div style={{ fontSize: 7, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 5 }}>{lbl}</div>
+                      <input style={{ ...g.numInput, fontSize: 14 }} type="number" placeholder="0"
+                        value={postWorkoutDaily[f]}
+                        onChange={e => setPostWorkoutDaily(p => ({ ...p, [f]: e.target.value }))} />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 8, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Stretches</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  {STRETCHES.map(s => (
+                    <button key={s.key} onClick={() => setPostStretch(p => ({ ...p, [s.key]: !p[s.key] }))}
+                      style={{ padding: "7px 8px", borderRadius: 6, border: `1px solid ${postStretch[s.key] ? "#1a4020" : "#1e1e1e"}`, background: postStretch[s.key] ? "#0b180b" : "#141414", color: postStretch[s.key] ? "#3a9e4f" : "#555", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
+                      {postStretch[s.key] ? "✓ " : ""}{s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => {
+                const hasActivity = Object.values(postWorkoutDaily).some(v => v) || Object.values(postStretch).some(Boolean);
+                if (hasActivity && completionModal?.saveDaily) {
+                  completionModal.saveDaily(postWorkoutDaily, postStretch);
+                }
+                setPostWorkoutDaily({ crunches: "", planks: "", pushups: "" });
+                setPostStretch({});
+                setCompletionModal(null);
+                setMode("pick");
+              }} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <button onClick={() => setMode("pick")} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11 }}>←</button>
+          <span style={{ fontSize: 16 }}>{ICON[workoutType]}</span>
+          <span style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#888" }}>{workoutType}</span>
+          {lastSession && <span style={g.badge}>{lastSession.date}</span>}
+        </div>
+
+        {workoutType === "vacation" && (
+          <div style={{ background: "#0d1a0d", border: "1px solid #1a3a1a", borderRadius: 8, padding: "10px 14px", marginBottom: 14 }}>
+            <div style={{ fontSize: 9, color: "#3a9e4f", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>🏖️ Vacation Mode</div>
+            <div style={{ fontSize: 10, color: "#555", lineHeight: 1.6 }}>Bodyweight only — no equipment needed. Track reps to maintain your streak and comeback strong.</div>
+          </div>
+        )}
+
+        {!lastSession ? (
+          <div style={{ ...g.card, padding: "20px", textAlign: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: "#555" }}>No previous {workoutType} session found.</div>
+            <div style={{ fontSize: 10, color: "#333", marginTop: 4 }}>This will be your baseline.</div>
+          </div>
+        ) : (
+          <div style={{ ...g.card, overflow: "hidden", marginBottom: 16 }}>
+            <div style={{ background: "#0f0f0f", padding: "10px 14px", borderBottom: "1px solid #1a1a1a" }}>
+              <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase" }}>Last Session · {lastSession.date}</div>
+            </div>
+            <div style={{ padding: "12px 14px" }}>
+              {lastExercises.map((ex, i) => {
+                const filled = ex.sets.filter(s => s.reps || s.weight);
+                if (!filled.length) return null;
+                const vol = filled.reduce((a, s) => a + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0);
+                const topSet = filled.reduce((a, b) => (parseFloat(b.weight)||0) > (parseFloat(a.weight)||0) ? b : a);
+                return (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 8, marginBottom: 8, borderBottom: i < lastExercises.length - 1 ? "1px solid #141414" : "none" }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#ccc", fontWeight: 600 }}>{ex.name}</div>
+                      <div style={{ fontSize: 9, color: "#555", marginTop: 2 }}>{filled.length} sets · top {topSet.reps}×{topSet.weight}lbs</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: 9, color: "#444" }}>{Math.round(vol).toLocaleString()} lbs</div>
+                      <div style={{ fontSize: 7, color: "#333" }}>volume</div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ borderTop: "1px solid #1e1e1e", paddingTop: 8, marginTop: 4, display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 9, color: "#555" }}>Total Volume</span>
+                <span style={{ fontSize: 10, color: "#888", fontWeight: 700 }}>
+                  {Math.round(lastExercises.reduce((a, ex) => a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) => b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0)).toLocaleString()} lbs
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <button onClick={launchWorkout} style={{ ...g.primary, fontSize: 11, letterSpacing: 3 }}>
+          START {workoutType.toUpperCase()} →
+        </button>
+      </div>
+    );
+  }
+
+  // ── Weights log ──
+  if (workoutType !== "run") {
+    const db = EXERCISE_DB[workoutType];
+    return (
+      <div style={g.page}>
+        {/* Completion modal */}
+        {completionModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "24px 20px", width: "100%", maxWidth: 380 }}>
+              <div style={{ fontSize: 10, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase", marginBottom: 4 }}>✓ {completionModal.type} Complete</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16, marginTop: 16 }}>
+                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#e8e0d5", fontFamily: "'DM Mono', monospace" }}>{Math.round(completionModal.todayVol).toLocaleString()}</div>
+                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>TODAY LBS</div>
+                </div>
+                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: completionModal.lastVol ? (completionModal.todayVol >= completionModal.lastVol ? "#3a9e4f" : "#c0392b") : "#555", fontFamily: "'DM Mono', monospace" }}>
+                    {completionModal.lastVol ? `${completionModal.todayVol >= completionModal.lastVol ? "+" : ""}${Math.round(((completionModal.todayVol - completionModal.lastVol) / completionModal.lastVol) * 100)}%` : "FIRST"}
+                  </div>
+                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>VS {completionModal.lastDate || "N/A"}</div>
+                </div>
+              </div>
+              {completionModal.prs?.length > 0 && (
+                <div style={{ background: "#0a1a0a", border: "1px solid #1a4020", borderRadius: 8, padding: "10px 12px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 8, letterSpacing: 2, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 8 }}>🏆 New PRs This Session</div>
+                  {completionModal.prs.map((pr, i) => (
+                    <div key={i} style={{ fontSize: 10, color: "#ccc", marginBottom: 4 }}>
+                      {pr.name} — <span style={{ color: "#3a9e4f", fontWeight: 700 }}>{pr.weight} lbs</span> <span style={{ color: "#444" }}>prev {pr.prev}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Post-workout crunches + stretches */}
+              <div style={{ background: "#0f0f0f", border: "1px solid #1a1a1a", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+                <div style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 10 }}>Log Crunches & Stretches</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+                  {[["crunches","✦","Crunches"],["planks","◆","Planks"],["pushups","▲","Push-Ups"]].map(([f,icon,lbl]) => (
+                    <div key={f} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 12, marginBottom: 3 }}>{icon}</div>
+                      <div style={{ fontSize: 7, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 5 }}>{lbl}</div>
+                      <input style={{ ...g.numInput, fontSize: 14 }} type="number" placeholder="0"
+                        value={postWorkoutDaily[f]}
+                        onChange={e => setPostWorkoutDaily(p => ({ ...p, [f]: e.target.value }))} />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 8, color: "#555", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Stretches</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                  {STRETCHES.map(s => (
+                    <button key={s.key} onClick={() => setPostStretch(p => ({ ...p, [s.key]: !p[s.key] }))}
+                      style={{ padding: "7px 8px", borderRadius: 6, border: `1px solid ${postStretch[s.key] ? "#1a4020" : "#1e1e1e"}`, background: postStretch[s.key] ? "#0b180b" : "#141414", color: postStretch[s.key] ? "#3a9e4f" : "#555", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
+                      {postStretch[s.key] ? "✓ " : ""}{s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => {
+                const hasActivity = Object.values(postWorkoutDaily).some(v => v) || Object.values(postStretch).some(Boolean);
+                if (hasActivity && completionModal?.saveDaily) {
+                  completionModal.saveDaily(postWorkoutDaily, postStretch);
+                }
+                setPostWorkoutDaily({ crunches: "", planks: "", pushups: "" });
+                setPostStretch({});
+                setCompletionModal(null);
+                setMode("pick");
+              }} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <button onClick={() => setMode("pick")} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11 }}>←</button>
+          <span style={{ fontSize: 16 }}>{ICON[workoutType]}</span>
+          <span style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#888" }}>{workoutType}</span>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="date" value={workoutDate} onChange={e => setWorkoutDate(e.target.value)}
+              style={{ background: workoutDate !== new Date().toLocaleDateString("en-CA") ? "#1a0d00" : "#141414", border: `1px solid ${workoutDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#252525"}`, color: workoutDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#666", borderRadius: 5, padding: "4px 6px", fontSize: 10, fontFamily: "'DM Mono', monospace", cursor: "pointer" }} />
+            <span style={{ fontSize: 11, color: totalSets >= 20 ? "#ff4d00" : "#fff", letterSpacing: 2, fontWeight: 700 }}>{totalSets}/20</span>
+            <div style={{ width: 60 }}><Bar value={totalSets} max={20} /></div>
+            <span style={{ fontSize: 7, color: "#2a4a2a", letterSpacing: 1 }}>● AUTO</span>
+          </div>
+        </div>
+
+        <VoiceFill tab="workout" onFill={(parsed) => {
+          if (parsed.exercises?.length) {
+            setExercises(parsed.exercises.map(e => ({
+              name: e.name || "",
+              sets: e.sets?.length ? e.sets.map(s => ({ reps: String(s.reps || ""), weight: String(s.weight || "") })) : [{ reps: "", weight: "" }]
+            })));
+          }
+        }} />
+
+        {exercises.map((ex, i) => (
+          <div key={i} style={g.card}>
+            <div style={{ background: "#191919", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #1e1e1e" }}>
+              <input style={{ ...g.input, padding: "4px 0", background: "none", border: "none", fontSize: 12, fontWeight: 700, letterSpacing: 1, flex: 1, color: "#ddd" }}
+                value={ex.name} onChange={e => updateName(i, e.target.value)} placeholder="Exercise…" />
+              <div style={{ display: "flex", gap: 6, marginLeft: 10 }}>
+                <button style={{ ...g.ghost, padding: "3px 8px", fontSize: 9 }} onClick={() => setShowAlts(showAlts === i ? null : i)}>SWAP</button>
+                <button style={{ ...g.ghost, padding: "3px 8px", fontSize: 9, color: "#888" }} onClick={() => removeExercise(i)}>✕</button>
+              </div>
+            </div>
+
+            {showAlts === i && (
+              <div style={{ padding: "12px 14px", background: "#0e0e0e", borderBottom: "1px solid #1e1e1e" }}>
+                <span style={{ ...g.label, marginBottom: 8 }}>Alternatives</span>
+                {db.alternatives.map(a => <button key={a} style={g.altBtn} onClick={() => replaceWithAlt(i, a)}>+ {a}</button>)}
+              </div>
+            )}
+
+            <div style={{ padding: "11px 14px" }}>
+              <QuickFillBar vacationMode={workoutType === "vacation"} onApply={(numSets, reps, weight) => {
+                const addedSets = Array.from({ length: numSets }, () => ({ reps, weight }));
+                setExercises(prev => prev.map((ex2, idx2) => {
+                  if (idx2 !== i) return ex2;
+                  const existingFilled = ex2.sets.filter(s => s.reps || s.weight);
+                  return { ...ex2, sets: [...existingFilled, ...addedSets] };
+                }));
+              }} />
+              {(() => {
+                const last = getLastPerformance(ex.name);
+                if (!last) return null;
+                const currentVol = ex.sets.filter(s => s.reps || s.weight).reduce((a, s) => a + ((parseFloat(s.weight)||0) * (parseFloat(s.reps)||0)), 0);
+                const improved = currentVol > 0 && currentVol > last.totalVol;
+                return (
+                  <div style={{ marginBottom: 10, padding: "7px 10px", background: "#07101a", borderRadius: 5, border: "1px solid #0d2a3d", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 9, color: "#3a8fc4", letterSpacing: 1 }}>
+                      LAST · {last.sets}×{last.reps} @ {last.weight} lbs
+                      <span style={{ color: "#1e5a7a", marginLeft: 6 }}>{last.date}</span>
+                    </span>
+                    {improved && <span style={{ fontSize: 11, color: "#3a9e4f", fontWeight: 700 }}>↑</span>}
+                  </div>
+                );
+              })()}
+              <div style={{ display: "grid", gridTemplateColumns: workoutType === "vacation" ? "22px 1fr 24px" : "22px 1fr 1fr 24px", gap: 8, marginBottom: 7 }}>
+                <span />
+                <span style={{ fontSize: 8, letterSpacing: 3, color: "#777", textTransform: "uppercase" }}>REPS</span>
+                {workoutType !== "vacation" && <span style={{ fontSize: 8, letterSpacing: 3, color: "#777", textTransform: "uppercase" }}>LBS</span>}
+                <span />
+              </div>
+              {ex.sets.map((set, j) => {
+                const counted = !!(set.reps || set.weight);
+                return (
+                  <div key={j} style={{ display: "grid", gridTemplateColumns: workoutType === "vacation" ? "22px 1fr 24px" : "22px 1fr 1fr 24px", gap: 8, marginBottom: 7, alignItems: "center" }}>
+                    <span style={{ fontSize: 9, color: counted ? "#3a9e4f" : "#555", textAlign: "center", fontWeight: counted ? 700 : 400 }}>{j + 1}</span>
+                    <input style={{ ...g.numInput, borderColor: counted ? "#1a3a1a" : "#252525" }} type="number" placeholder="—" value={set.reps} onChange={e => updateSet(i, j, "reps", e.target.value)} />
+                    {workoutType !== "vacation" && <input style={{ ...g.numInput, borderColor: counted ? "#1a3a1a" : "#252525" }} type="number" placeholder="—" value={set.weight} onChange={e => updateSet(i, j, "weight", e.target.value)} />}
+                    <span style={{ fontSize: 14, color: counted ? "#3a9e4f" : "transparent", textAlign: "center", transition: "color 0.2s" }}>✓</span>
+                  </div>
+                );
+              })}
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <button style={{ ...g.ghost, fontSize: 9 }} onClick={() => addSet(i)}>+ SET</button>
+                {ex.sets.length > 1 && (
+                  <button style={{ ...g.ghost, fontSize: 9, color: "#444" }} onClick={() => {
+                    const u = exercises.map((ex2, idx) => idx === i ? { ...ex2, sets: ex2.sets.slice(0, -1) } : ex2);
+                    setExercises(u);
+                  }}>− SET</button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        <button style={{ ...g.ghost, width: "100%", marginBottom: 10 }} onClick={() => setExercises([...exercises, { name: "", sets: [{ reps: "", weight: "" }] }])}>+ ADD EXERCISE</button>
+
+        {/* Live volume comparison */}
+        {(() => {
+          const lastSession = getLastSession(workoutType);
+          if (!lastSession) return null;
+          const todayVol = exercises.reduce((a, ex) => a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) => b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0);
+          const lastVol = (lastSession.exercises || []).reduce((a, ex) => a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) => b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0);
+          if (!lastVol) return null;
+          const pct = Math.min(200, Math.round((todayVol / lastVol) * 100));
+          const ahead = todayVol >= lastVol;
+          const diff = Math.abs(todayVol - lastVol);
+          return (
+            <div style={{ ...g.card, padding: "12px 14px", marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase" }}>Volume vs Last Session</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: ahead ? "#3a9e4f" : "#c49a1a" }}>
+                  {todayVol > 0 ? `${ahead ? "+" : "-"}${Math.round(diff).toLocaleString()} lbs (${pct}%)` : "—"}
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <div>
+                  <div style={{ fontSize: 7, color: "#ff4d00", letterSpacing: 1, marginBottom: 3 }}>TODAY</div>
+                  <div style={{ height: 4, background: "#1a1a1a", borderRadius: 2 }}>
+                    <div style={{ height: "100%", width: `${Math.min(100, (todayVol / Math.max(todayVol, lastVol)) * 100)}%`, background: "#ff4d00", borderRadius: 2, transition: "width 0.3s" }} />
+                  </div>
+                  <div style={{ fontSize: 9, color: "#888", marginTop: 3 }}>{Math.round(todayVol).toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 7, color: "#444", letterSpacing: 1, marginBottom: 3 }}>LAST · {lastSession.date}</div>
+                  <div style={{ height: 4, background: "#1a1a1a", borderRadius: 2 }}>
+                    <div style={{ height: "100%", width: `${Math.min(100, (lastVol / Math.max(todayVol, lastVol)) * 100)}%`, background: "#333", borderRadius: 2 }} />
+                  </div>
+                  <div style={{ fontSize: 9, color: "#444", marginTop: 3 }}>{Math.round(lastVol).toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        <button style={g.primary} onClick={saveWorkout}>{saved ? "✓  SESSION SAVED" : "SAVE SESSION"}</button>
+      </div>
+    );
+  }
+
+  // ── Run log ──
+  const dist = parseFloat(runData.distance) || 0;
+
+  // Auto-calculate pace from distance + duration
+  const calcPace = (distance, duration) => {
+    if (!distance || !duration) return "";
+    const d = parseFloat(distance);
+    if (!d) return "";
+    // Parse mm:ss or plain minutes
+    let totalMins = 0;
+    if (String(duration).includes(":")) {
+      const [mins, secs] = duration.split(":").map(Number);
+      totalMins = (mins || 0) + (secs || 0) / 60;
+    } else {
+      totalMins = parseFloat(duration) || 0;
+    }
+    if (!totalMins) return "";
+    const paceDecimal = totalMins / d;
+    const paceMins = Math.floor(paceDecimal);
+    const paceSecs = Math.round((paceDecimal - paceMins) * 60);
+    return `${paceMins}:${String(paceSecs).padStart(2, "0")}`;
+  };
+
+  const autoPace = calcPace(runData.distance, runData.duration);
+
+  return (
+    <div style={g.page}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <button onClick={() => setMode("pick")} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11 }}>←</button>
+        <span style={{ fontSize: 16 }}>⚡</span>
+        <span style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#888" }}>RUN</span>
+        <input type="date" value={workoutDate} onChange={e => setWorkoutDate(e.target.value)}
+          style={{ marginLeft: "auto", background: workoutDate !== new Date().toLocaleDateString("en-CA") ? "#1a0d00" : "#141414", border: `1px solid ${workoutDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#252525"}`, color: workoutDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#666", borderRadius: 5, padding: "4px 6px", fontSize: 10, fontFamily: "'DM Mono', monospace", cursor: "pointer" }} />
+      </div>
+
+      {[["distance","Total Distance","mi","0.01"],["duration","Run Time","mm:ss",""],["firstStop","First Stop","mi","0.01"],["pace","Avg Pace","min/mi","0.01"],["heartRate","Heart Rate","bpm","1"],["maxSpeed","Max Speed","mph","0.1"]].map(([f, lbl, unit, step]) => (
+        <div key={f} style={g.card}>
+          <div style={{ padding: "13px 14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
+              <span style={{ fontSize: 9, letterSpacing: 3, color: "#555", textTransform: "uppercase" }}>{lbl}</span>
+              <span style={{ fontSize: 9, color: "#777" }}>{unit}</span>
+            </div>
+            {f === "pace" ? (
+              <div style={{ position: "relative" }}>
+                <input style={{ ...g.input, color: !runData.pace && autoPace ? "#555" : "#e8e0d5" }}
+                  type="text" placeholder={autoPace || "e.g. 9:20"}
+                  value={runData.pace}
+                  onChange={e => setRunData({ ...runData, pace: e.target.value })} />
+                {!runData.pace && autoPace && (
+                  <div style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11, color: "#555", fontFamily: "'DM Mono', monospace" }}>{autoPace}</span>
+                    <button onPointerDown={e => e.preventDefault()} onClick={() => setRunData(r => ({ ...r, pace: autoPace }))}
+                      style={{ fontSize: 7, color: "#ff4d00", border: "1px solid #ff4d00", borderRadius: 3, padding: "2px 5px", background: "none", cursor: "pointer", fontFamily: "'DM Mono', monospace", letterSpacing: 1 }}>USE</button>
+                  </div>
+                )}
+              </div>
+            ) : f === "duration" ? (
+              <input style={g.input} type="text" placeholder="e.g. 42:00" value={runData[f]} onChange={e => setRunData({ ...runData, [f]: e.target.value })} />
+            ) : (
+              <input style={g.input} type="number" step={step} placeholder="0" value={runData[f]} onChange={e => setRunData({ ...runData, [f]: e.target.value })} />
+            )}
+          </div>
+        </div>
+      ))}
+
+      {dist > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, letterSpacing: 2, color: dist >= 4 ? "#ff4d00" : "#333", textTransform: "uppercase", marginBottom: 5 }}>
+            <span>4 MI GOAL</span>
+            <span>{dist >= 4 ? "✓ REACHED" : `${(4 - dist).toFixed(2)} to go`}</span>
+          </div>
+          <Bar value={dist} max={4} />
+        </div>
+      )}
+
+      {lastRun && (
+        <div style={{ ...g.card, padding: "12px 14px", marginBottom: 14 }}>
+          <span style={{ ...g.label, marginBottom: 6 }}>vs Last Run · {lastRun.date}</span>
+          <div style={{ fontSize: 11, color: "#444", lineHeight: 1.9 }}>
+            {lastRun.runData.distance && `${lastRun.runData.distance} mi`}{lastRun.runData.pace && ` · ${lastRun.runData.pace} /mi`}{lastRun.runData.heartRate && ` · ${lastRun.runData.heartRate} bpm`}
+            {lastRun.runData.location && <span style={{ color: "#333" }}> · {lastRun.runData.location}</span>}
+            {lastRun.runData.notes && <div style={{ fontSize: 10, color: "#333", marginTop: 4, fontStyle: "italic" }}>"{lastRun.runData.notes}"</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Run Context */}
+      <div style={{ ...g.card, padding: "14px 16px", marginBottom: 14 }}>
+        <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase", marginBottom: 12 }}>Run Context</div>
+
+        {/* Location */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 8, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>Location</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {["Outdoor", "Treadmill", "Track", "Trail"].map(loc => (
+              <button key={loc} onClick={() => setRunData(r => ({ ...r, location: r.location === loc ? "" : loc }))}
+                style={{ padding: "5px 10px", borderRadius: 5, border: `1px solid ${runData.location === loc ? "#ff4d00" : "#252525"}`, background: runData.location === loc ? "#1c1008" : "none", color: runData.location === loc ? "#ff4d00" : "#555", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
+                {loc}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* How I felt */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 8, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>How I Felt</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {["Strong 💪", "Good", "OK", "Tired", "Struggled 😓"].map(feel => (
+              <button key={feel} onClick={() => setRunData(r => ({ ...r, feel: r.feel === feel ? "" : feel }))}
+                style={{ padding: "5px 10px", borderRadius: 5, border: `1px solid ${runData.feel === feel ? "#ff4d00" : "#252525"}`, background: runData.feel === feel ? "#1c1008" : "none", color: runData.feel === feel ? "#ff4d00" : "#555", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
+                {feel}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Why I stopped */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 8, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>Why I Stopped</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {["Hit goal", "Time limit", "Fatigue", "Injury", "Weather"].map(reason => (
+              <button key={reason} onClick={() => setRunData(r => ({ ...r, stopReason: r.stopReason === reason ? "" : reason }))}
+                style={{ padding: "5px 10px", borderRadius: 5, border: `1px solid ${runData.stopReason === reason ? "#ff4d00" : "#252525"}`, background: runData.stopReason === reason ? "#1c1008" : "none", color: runData.stopReason === reason ? "#ff4d00" : "#555", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
+                {reason}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Free notes */}
+        <div>
+          <div style={{ fontSize: 8, color: "#555", letterSpacing: 2, textTransform: "uppercase", marginBottom: 6 }}>Notes</div>
+          <textarea
+            placeholder="Pacing felt off first mile, picked it up after... weather was perfect... stopped at light on Main St..."
+            value={runData.notes}
+            onChange={e => setRunData(r => ({ ...r, notes: e.target.value }))}
+            style={{ ...g.input, width: "100%", minHeight: 70, resize: "vertical", fontSize: 11, lineHeight: 1.6, padding: "10px", boxSizing: "border-box", fontFamily: "system-ui, sans-serif" }}
+          />
+        </div>
+      </div>
+
+      <button style={g.primary} onClick={saveWorkout}>{saved ? "✓  RUN SAVED" : "SAVE RUN"}</button>
+    </div>
+  );
+}
+
+// ── DAILY TAB ──────────────────────────────────────────────────────────────
+function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
+  const todayStr = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD for input
+  const [daily, setDaily] = useState({ crunches: "", planks: "", pushups: "", steps: "" });
+  const [logDate, setLogDate] = useState(todayStr());
+  const [stretchDone, setStretchDone] = useState({});
+  const [saved, setSaved] = useState(false);
+
+  const stretchCount = Object.values(stretchDone).filter(Boolean).length;
+
+  const saveDaily = async () => {
+    const displayDate = logDate ? new Date(logDate + "T12:00:00").toLocaleDateString() : new Date().toLocaleDateString();
+    const newStretches = STRETCHES.filter(s => stretchDone[s.key]).map(s => s.key);
+
+    // Check if entry already exists for this date — if so, merge
+    const existing = dailyLog.find(d => d.date === displayDate);
+    if (existing) {
+      const merged = {
+        ...existing,
+        crunches: daily.crunches || existing.crunches,
+        planks: daily.planks || existing.planks,
+        pushups: daily.pushups || existing.pushups,
+        steps: daily.steps || existing.steps,
+        stretches: [...new Set([...(existing.stretches || []), ...newStretches])],
+      };
+      const newD = dailyLog.map(d => d.date === displayDate ? merged : d);
+      setDailyLog(newD);
+      // Delete old entry and save merged
+      await saveEntry(merged);
+    } else {
+      const entry = { id: Date.now(), date: displayDate, ...daily, stretches: newStretches };
+      setDailyLog(prev => [entry, ...prev]);
+      await saveEntry(entry);
+    }
+    setDaily({ crunches: "", planks: "", pushups: "", steps: "" });
+    setLogDate(todayStr());
+    setStretchDone({});
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  const steps = parseInt(daily.steps) || 0;
+  const stepPct = Math.min((steps / 10000) * 100, 100);
+
+  return (
+    <div style={g.page}>
+      {/* Date picker */}
+      <div style={{ ...g.card, padding: "12px 14px", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 9, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>Log Date</span>
+        <input
+          type="date"
+          value={logDate}
+          onChange={e => setLogDate(e.target.value)}
+          style={{ background: "none", border: "none", color: logDate === todayStr() ? "#888" : "#ff4d00", fontFamily: "'DM Mono', monospace", fontSize: 11, outline: "none", textAlign: "right", cursor: "pointer" }}
+        />
+      </div>
+
+      {/* Voice */}
+      <VoiceFill tab="daily" onFill={(parsed) => {
+        setDaily(prev => ({
+          crunches: parsed.crunches !== undefined ? String(parsed.crunches) : prev.crunches,
+          planks: parsed.planks !== undefined ? String(parsed.planks) : prev.planks,
+          pushups: parsed.pushups !== undefined ? String(parsed.pushups) : prev.pushups,
+          steps: parsed.steps !== undefined ? String(parsed.steps) : prev.steps,
+        }));
+        if (parsed.stretches?.length) {
+          const newStretches = {};
+          parsed.stretches.forEach(s => { newStretches[s] = true; });
+          setStretchDone(prev => ({ ...prev, ...newStretches }));
+        }
+      }} />
+
+      {/* Steps */}
+      <span style={g.label}>Steps</span>
+      <div style={{ ...g.card, padding: "16px 14px", marginBottom: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <span style={{ fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>↳ Daily Steps</span>
+          <span style={{ fontSize: 9, letterSpacing: 2, color: steps >= 10000 ? "#3a9e4f" : "#333", textTransform: "uppercase" }}>
+            {steps >= 10000 ? "✓ 10K REACHED" : `${(10000 - steps).toLocaleString()} to go`}
+          </span>
+        </div>
+        <input style={{ ...g.numInput, fontSize: 20, fontWeight: 700, marginBottom: 10 }} type="number" placeholder="0" value={daily.steps} onChange={e => setDaily({ ...daily, steps: e.target.value })} />
+        <div style={{ height: 3, background: "#1e1e1e", borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${stepPct}%`, background: steps >= 10000 ? "#3a9e4f" : "#ff4d00", borderRadius: 3, transition: "width 0.4s ease" }} />
+        </div>
+      </div>
+
+      {/* Calisthenics */}
+      <span style={{ ...g.label, marginTop: 18 }}>Calisthenics</span>
+      <div style={{ ...g.card, padding: "16px 14px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          {[["crunches", "✦", "Crunches"], ["planks", "◆", "Planks"], ["pushups", "▲", "Push-Ups"]].map(([f, icon, lbl]) => (
+            <div key={f} style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 16, marginBottom: 5 }}>{icon}</div>
+              <div style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 7 }}>{lbl}</div>
+              <input style={g.numInput} type="number" placeholder="0" value={daily[f]} onChange={e => setDaily({ ...daily, [f]: e.target.value })} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Stretching */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 22, marginBottom: 12 }}>
+        <span style={g.label}>Stretching</span>
+        <span style={{ fontSize: 9, letterSpacing: 2, color: stretchCount === 4 ? "#3a9e4f" : "#2a2a2a", textTransform: "uppercase", marginBottom: 12 }}>{stretchCount}/4</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+        {STRETCHES.map(s => (
+          <StretchTimer key={s.key} stretch={s} completed={!!stretchDone[s.key]}
+            onComplete={() => setStretchDone(p => ({ ...p, [s.key]: true }))} />
+        ))}
+      </div>
+
+      <button style={g.primary} onClick={saveDaily}>{saved ? "✓  LOGGED" : "LOG DAILY ROUTINE"}</button>
+
+      {/* Recent daily logs */}
+      {dailyLog.length > 0 && (
+        <>
+          <span style={{ ...g.label, marginTop: 8 }}>Recent</span>
+          {dailyLog.slice(0, 3).map(d => (
+            <div key={d.id} style={{ ...g.card, padding: "12px 14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                <span style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "#555" }}>DAILY</span>
+                <span style={g.badge}>{d.date}</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", fontSize: 11, color: "#aaa", marginBottom: d.stretches?.length ? 7 : 0 }}>
+                <span>✦ {d.crunches || 0}</span><span>◆ {d.planks || 0}</span><span>▲ {d.pushups || 0}</span>
+              </div>
+              {d.steps && <div style={{ fontSize: 11, color: parseInt(d.steps) >= 10000 ? "#3a9e4f" : "#444", marginBottom: d.stretches?.length ? 7 : 0 }}>↳ {parseInt(d.steps).toLocaleString()} steps</div>}
+              {d.stretches?.length > 0 && <div style={{ fontSize: 10, color: "#3a9e4f" }}>🧘 {d.stretches.join(", ")}</div>}
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── SLEEP TAB ──────────────────────────────────────────────────────────────
+function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
+  const [oura, setOura] = useState({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "" });
+  const [saved, setSaved] = useState(false);
+  const [sleepDate, setSleepDate] = useState(() => new Date().toLocaleDateString("en-CA"));
+
+  const sc = scoreColor(oura.sleepScore);
+  const rc = scoreColor(oura.readiness);
+
+  const jhSpread = (oura.hrv && oura.heartRate)
+    ? (parseFloat(oura.hrv) - parseFloat(oura.heartRate)).toFixed(1)
+    : null;
+  const jhColor = jhSpread === null ? "#444" : jhSpread > 0 ? "#3a9e4f" : "#c0392b";
+
+  const saveSleep = async () => {
+    const displayDate = new Date(sleepDate + "T12:00:00").toLocaleDateString();
+    const entry = { id: Date.now(), date: displayDate, ...oura, jhSpread };
+    const newS = [entry, ...sleepLog];
+    setSleepLog(newS);
+    await saveEntry(entry);
+    setOura({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "" });
+    setSleepDate(new Date().toLocaleDateString("en-CA"));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  return (
+    <div style={g.page}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <span style={g.label}>Oura Sleep</span>
+        <input type="date" value={sleepDate} onChange={e => setSleepDate(e.target.value)}
+          style={{ background: sleepDate !== new Date().toLocaleDateString("en-CA") ? "#1a0d00" : "#141414", border: `1px solid ${sleepDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#252525"}`, color: sleepDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#666", borderRadius: 5, padding: "4px 6px", fontSize: 10, fontFamily: "'DM Mono', monospace", cursor: "pointer" }} />
+      </div>
+
+      {/* Voice */}
+      <VoiceFill tab="sleep" onFill={(parsed) => {
+        setOura(prev => ({
+          sleepScore: parsed.sleepScore !== undefined ? String(parsed.sleepScore) : prev.sleepScore,
+          readiness: parsed.readiness !== undefined ? String(parsed.readiness) : prev.readiness,
+          hoursSlept: parsed.hoursSlept !== undefined ? String(parsed.hoursSlept) : prev.hoursSlept,
+          rem: parsed.rem !== undefined ? String(parsed.rem) : prev.rem,
+          heartRate: parsed.heartRate !== undefined ? String(parsed.heartRate) : prev.heartRate,
+          hrv: parsed.hrv !== undefined ? String(parsed.hrv) : prev.hrv,
+          respiratoryRate: parsed.respiratoryRate !== undefined ? String(parsed.respiratoryRate) : prev.respiratoryRate,
+        }));
+      }} />
+
+      {/* Dual score hero — Sleep + Readiness */}
+      <div style={{ ...g.card, background: "#0f0f0f" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, background: "#1a1a1a", borderBottom: "1px solid #1a1a1a" }}>
+          {[["sleepScore", "Sleep Score", sc], ["readiness", "Readiness", rc]].map(([field, label, color]) => (
+            <div key={field} style={{ background: "#0f0f0f", padding: "18px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                <div style={{ position: "relative", width: 52, height: 52, flexShrink: 0 }}>
+                  <svg width="52" height="52" style={{ transform: "rotate(-90deg)" }}>
+                    <circle cx="26" cy="26" r="22" fill="none" stroke="#1a1a1a" strokeWidth="4" />
+                    <circle cx="26" cy="26" r="22" fill="none" stroke={color} strokeWidth="4"
+                      strokeDasharray={2 * Math.PI * 22}
+                      strokeDashoffset={2 * Math.PI * 22 * (1 - (parseInt(oura[field]) || 0) / 100)}
+                      strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.5s ease" }} />
+                  </svg>
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: oura[field] ? color : "#2a2a2a", fontFamily: "'DM Mono', monospace" }}>{oura[field] || "—"}</span>
+                  </div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 8, letterSpacing: 3, color: "#777", textTransform: "uppercase", marginBottom: 5 }}>{label}</div>
+                  <input
+                    style={{ background: "none", border: "none", borderBottom: "1px solid #1e1e1e", color: oura[field] ? color : "#555", fontSize: 26, fontFamily: "'DM Mono', monospace", fontWeight: 700, width: "100%", outline: "none", padding: "2px 0" }}
+                    type="number" min="0" max="100" placeholder="—"
+                    value={oura[field]} onChange={e => setOura(o => ({ ...o, [field]: e.target.value }))} />
+                  {oura[field] && <div style={{ fontSize: 7, letterSpacing: 3, color, marginTop: 4, textTransform: "uppercase" }}>{scoreLabel(oura[field])}</div>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Metrics grid — 3 columns */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 1, background: "#1a1a1a" }}>
+          {[
+            ["hoursSlept", "Sleep",    "hrs",  "◑", "time"],
+            ["rem",        "REM",      "hrs",  "◎", "time"],
+            ["heartRate",  "Resting HR","bpm", "♡", "number"],
+            ["hrv",        "HRV",      "ms",   "∿", "number"],
+            ["respiratoryRate","Resp.", "brpm", "≋", "number"],
+          ].map(([field, label, unit, icon, inputType]) => (
+            <div key={field} style={{ background: "#0f0f0f", padding: "12px 10px" }}>
+              <div style={{ fontSize: 8, letterSpacing: 2, color: "#777", textTransform: "uppercase", marginBottom: 6, textAlign: "center" }}>{icon} {label}</div>
+              {inputType === "time" ? (
+                <input style={{ ...g.numInput, fontSize: 16, fontWeight: 700, padding: "8px 4px", textAlign: "center" }}
+                  type="text" placeholder="6:12" maxLength={5}
+                  value={oura[field]}
+                  onChange={e => {
+                    let v = e.target.value.replace(/[^0-9:]/g, "");
+                    // Auto-insert colon after first 1-2 digits
+                    if (v.length === 2 && !v.includes(":") && oura[field].length < 2) v = v + ":";
+                    setOura(o => ({ ...o, [field]: v }));
+                  }} />
+              ) : (
+                <input style={{ ...g.numInput, fontSize: 16, fontWeight: 700, padding: "8px 4px" }}
+                  type="number" step="1" placeholder="—"
+                  value={oura[field]} onChange={e => setOura(o => ({ ...o, [field]: e.target.value }))} />
+              )}
+              <div style={{ fontSize: 7, color: "#555", textAlign: "center", marginTop: 4 }}>{unit}</div>
+            </div>
+          ))}
+
+          {/* JH Spread — auto-calculated, read only */}
+          <div style={{ background: "#0f0f0f", padding: "12px 10px" }}>
+            <div style={{ fontSize: 8, letterSpacing: 2, color: "#777", textTransform: "uppercase", marginBottom: 6, textAlign: "center" }}>⚖ JH Spread</div>
+            <div style={{ ...g.numInput, fontSize: 16, fontWeight: 700, padding: "8px 4px", color: jhSpread !== null ? jhColor : "#2a2a2a", border: "1px solid #1a1a1a", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {jhSpread !== null ? (jhSpread > 0 ? `+${jhSpread}` : jhSpread) : "—"}
+            </div>
+            <div style={{ fontSize: 7, color: "#444", textAlign: "center", marginTop: 4 }}>HRV−HR</div>
+          </div>
+        </div>
+
+        <div style={{ padding: "14px 16px" }}>
+          <button onClick={saveSleep} style={{ ...g.primary, marginBottom: 0, background: saved ? "#0b180b" : "#ff4d00", border: saved ? "1px solid #1a4020" : "none", color: saved ? "#3a9e4f" : "#fff", transition: "all 0.3s" }}>
+            {saved ? "✓  SLEEP LOGGED" : "LOG SLEEP"}
+          </button>
+        </div>
+      </div>
+
+      {/* Sleep history */}
+      {sleepLog.length > 0 && (
+        <>
+          <span style={{ ...g.label, marginTop: 20 }}>History</span>
+          {sleepLog.map(s => {
+            const sc2 = scoreColor(s.sleepScore);
+            const rc2 = scoreColor(s.readiness);
+            const jh = s.jhSpread;
+            const jhC = jh === null || jh === undefined ? "#333" : parseFloat(jh) > 0 ? "#3a9e4f" : "#c0392b";
+            return (
+              <div key={s.id} style={{ ...g.card, overflow: "hidden" }}>
+                <div style={{ background: "#0f0f0f", padding: "11px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #1a1a1a" }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+                    <div>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: sc2, fontFamily: "'DM Mono', monospace" }}>{s.sleepScore || "—"}</span>
+                      {s.sleepScore && <span style={{ fontSize: 7, letterSpacing: 2, color: sc2, textTransform: "uppercase", marginLeft: 4 }}>sleep</span>}
+                    </div>
+                    {s.readiness && (
+                      <div>
+                        <span style={{ fontSize: 18, fontWeight: 700, color: rc2, fontFamily: "'DM Mono', monospace" }}>{s.readiness}</span>
+                        <span style={{ fontSize: 7, letterSpacing: 2, color: rc2, textTransform: "uppercase", marginLeft: 4 }}>ready</span>
+                      </div>
+                    )}
+                  </div>
+                  <span style={g.badge}>{s.date}</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", padding: "10px 14px", gap: 4 }}>
+                  {[
+                    ["◑", s.hoursSlept, "hrs"],
+                    ["◎", s.rem, "rem"],
+                    ["♡", s.heartRate, "bpm"],
+                    ["∿", s.hrv, "ms"],
+                    ["≋", s.respiratoryRate, "br"],
+                    ["⚖", jh != null ? (parseFloat(jh) > 0 ? `+${jh}` : jh) : null, "jh"],
+                  ].map(([icon, val, unit], idx) => (
+                    <div key={idx} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 9, color: "#666", marginBottom: 3 }}>{icon}</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: idx === 5 ? jhC : val ? "#e8e0d5" : "#444" }}>{val || "—"}</div>
+                      <div style={{ fontSize: 7, color: "#666", marginTop: 2 }}>{unit}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── CONSISTENCY HEATMAP ───────────────────────────────────────────────────
+function ConsistencyHeatmap({ history, dailyLog, sleepLog }) {
+  // Build a map of date -> activity types
+  const today = new Date();
+  const activityMap = {};
+
+  history.forEach(h => {
+    if (h.date) {
+      if (!activityMap[h.date]) activityMap[h.date] = { workout: false, daily: false, sleep: false, workoutType: null };
+      activityMap[h.date].workout = true;
+      activityMap[h.date].workoutType = h.type;
+    }
+  });
+  dailyLog.forEach(d => {
+    if (d.date) {
+      if (!activityMap[d.date]) activityMap[d.date] = { workout: false, daily: false, sleep: false };
+      activityMap[d.date].daily = true;
+    }
+  });
+  sleepLog.forEach(s => {
+    if (s.date) {
+      if (!activityMap[s.date]) activityMap[s.date] = { workout: false, daily: false, sleep: false };
+      activityMap[s.date].sleep = true;
+    }
+  });
+
+  // Build 365 days ending today
+  const days = [];
+  for (let i = 364; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const dateStr = d.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" });
+    // Also try M/D/YYYY format used by the app
+    const appDateStr = d.toLocaleDateString();
+    days.push({ date: appDateStr, dow: d.getDay(), weekNum: Math.floor((364 - i) / 7) });
+  }
+
+  const getCellColor = (dateStr) => {
+    const a = activityMap[dateStr];
+    if (!a) return "#111";
+    if (a.workout && a.daily && a.sleep) return "#ff4d00"; // full day - orange
+    if (a.workout) return "#c03a00"; // workout only - dark orange
+    if (a.daily && a.sleep) return "#1a4a6e"; // daily + sleep - blue
+    if (a.daily) return "#0d2a3d"; // daily only
+    if (a.sleep) return "#1a3a5c"; // sleep only
+    return "#111";
+  };
+
+  // Group into weeks (columns)
+  const weeks = [];
+  for (let w = 0; w < 53; w++) {
+    weeks.push(days.filter(d => d.weekNum === w));
+  }
+
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const dowLabels = ["S","M","T","W","T","F","S"];
+
+  // Stats
+  const totalWorkouts = history.length;
+  const totalDays = Object.keys(activityMap).length;
+  const streak = (() => {
+    let s = 0;
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const ds = d.toLocaleDateString();
+      if (activityMap[ds]) s++;
+      else if (i > 0) break;
+    }
+    return s;
+  })();
+
+  const workoutTypeCounts = WORKOUT_TYPES.reduce((acc, t) => {
+    acc[t] = history.filter(h => h.type === t).length;
+    return acc;
+  }, {});
+
+  return (
+    <div>
+      {/* Stats row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+        {[
+          ["WORKOUTS", totalWorkouts, "sessions"],
+          ["ACTIVE DAYS", totalDays, "logged"],
+          ["STREAK", streak, "days"],
+        ].map(([label, val, sub]) => (
+          <div key={label} style={{ ...g.card, padding: "12px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#ff4d00", fontFamily: "'DM Mono', monospace" }}>{val}</div>
+            <div style={{ fontSize: 7, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginTop: 3 }}>{label}</div>
+            <div style={{ fontSize: 7, color: "#333", marginTop: 2 }}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Heatmap grid */}
+      <div style={{ ...g.card, padding: "14px 10px", overflowX: "auto" }}>
+        <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase", marginBottom: 10 }}>365-Day Consistency</div>
+        <div style={{ display: "flex", gap: 2 }}>
+          {/* Day labels */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginRight: 4, paddingTop: 14 }}>
+            {dowLabels.map((d, i) => (
+              <div key={i} style={{ fontSize: 7, color: "#333", height: 10, lineHeight: "10px", textAlign: "right" }}>{i % 2 === 0 ? d : ""}</div>
+            ))}
+          </div>
+          {/* Week columns */}
+          <div style={{ display: "flex", gap: 2, overflowX: "auto" }}>
+            {weeks.filter(w => w.length > 0).map((week, wi) => (
+              <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {/* Month label on first day of month */}
+                <div style={{ fontSize: 6, color: "#333", height: 10, lineHeight: "10px", textAlign: "center", minWidth: 10 }}>
+                  {week[0] && new Date(week[0].date).getDate() <= 7 ? months[new Date(week[0].date).getMonth()] : ""}
+                </div>
+                {/* Fill empty days at start of week */}
+                {Array.from({ length: week[0]?.dow || 0 }).map((_, pi) => (
+                  <div key={`p${pi}`} style={{ width: 10, height: 10 }} />
+                ))}
+                {week.map((day, di) => {
+                  const a = activityMap[day.date];
+                  const color = getCellColor(day.date);
+                  const isToday = day.date === today.toLocaleDateString();
+                  return (
+                    <div key={di} title={`${day.date}${a ? ` · ${[a.workout && a.workoutType, a.daily && "daily", a.sleep && "sleep"].filter(Boolean).join(", ")}` : ""}`}
+                      style={{
+                        width: 10, height: 10, borderRadius: 2,
+                        background: color,
+                        border: isToday ? "1px solid #ff4d00" : "1px solid transparent",
+                        transition: "transform 0.1s",
+                        cursor: a ? "pointer" : "default"
+                      }} />
+                  );
+                })}
               </div>
             ))}
           </div>
         </div>
-      );
-    }
 
-    // ── AI Coach ──────────────────────────────────────────────────────────────
-    function AICoach({ entries, CATEGORIES, allTotals, catStats, sortedDates }) {
-      const [apiKey,setApiKey]=useState(()=>lsGet("tracker_apikey",""));
-      const [showKey,setShowKey]=useState(false);
-      const [period,setPeriod]=useState("week");
-      const [loading,setLoading]=useState(false);
-      const [advice,setAdvice]=useState(()=>lsGet("tracker_advice",null));
-      const [advicePeriod,setAdvicePeriod]=useState(()=>lsGet("tracker_advice_period",null));
-      const [error,setError]=useState("");
-      function saveKey(k){setApiKey(k);lsSet("tracker_apikey",k);}
-      function buildPayload(){
-        const now=new Date(); const cutoff=new Date(now);
-        if(period==="week")cutoff.setDate(cutoff.getDate()-7); else cutoff.setDate(cutoff.getDate()-30);
-        const cutoffStr=cutoff.toISOString().slice(0,10);
-        const periodDates=sortedDates.filter(d=>d>=cutoffStr);
-        const periodEntries=periodDates.map(d=>({date:d,total:getDayTotal(CATEGORIES,entries[d]||{}),goal:isWeekend(d)?WEEKEND_GOAL:WEEKDAY_GOAL}));
-        const periodCatStats=CATEGORIES.filter(c=>!c.penalty).map(cat=>{
-          const done=periodDates.filter(d=>getCatPoints(cat,entries[d]||{})>0).length;
-          return {label:cat.label,points:cat.points,block:cat.block,done,total:periodDates.length,pct:periodDates.length?Math.round((done/periodDates.length)*100):0};
-        }).sort((a,b)=>a.pct-b.pct);
-        const weekdays=periodEntries.filter(d=>!isWeekend(d.date));
-        const weekends=periodEntries.filter(d=>isWeekend(d.date));
-        const wdAvg=weekdays.length?Math.round(weekdays.reduce((s,d)=>s+d.total,0)/weekdays.length):null;
-        const weAvg=weekends.length?Math.round(weekends.reduce((s,d)=>s+d.total,0)/weekends.length):null;
-        const avgScore=periodEntries.length?Math.round(periodEntries.reduce((s,d)=>s+d.total,0)/periodEntries.length):0;
-        const goalRate=periodEntries.length?Math.round((periodEntries.filter(d=>d.total>=d.goal).length/periodEntries.length)*100):0;
-        const streaks=CATEGORIES.filter(c=>!c.penalty).map(cat=>{let s=0;for(let i=sortedDates.length-1;i>=0;i--){if(getCatPoints(cat,entries[sortedDates[i]]||{})>0)s++;else break;}return{label:cat.label,streak:s};}).filter(s=>s.streak>0).sort((a,b)=>b.streak-a.streak).slice(0,8);
-        return {period,daysTracked:periodDates.length,avgScore,goalRate,wdAvg,weAvg,periodCatStats,streaks};
-      }
-      async function generate(){
-        if(!apiKey.trim()){setError("Please enter your Anthropic API key below.");return;}
-        if(sortedDates.length===0){setError("No tracking data yet — log some days first!");return;}
-        setLoading(true);setError("");
-        try{
-          const data=buildPayload();
-          const prompt=`You are a personal productivity and wellness coach analyzing someone's daily habit tracking data. Their day is split into Morning, Midday, and Evening blocks.
-
-OVERVIEW (last ${data.period==="week"?"7":"30"} days):
-- Days tracked: ${data.daysTracked}
-- Average daily score: ${data.avgScore} pts (weekday goal: 100, weekend goal: 75)
-- Goal hit rate: ${data.goalRate}%
-- Weekday avg: ${data.wdAvg!==null?data.wdAvg+" pts":"no data"}
-- Weekend avg: ${data.weAvg!==null?data.weAvg+" pts":"no data"}
-
-CATEGORY PERFORMANCE by block (sorted worst to best):
-${data.periodCatStats.map(c=>`- [${c.block?.toUpperCase()||"?"}] ${c.label} (${c.points}pts): ${c.pct}% (${c.done}/${c.total} days)`).join("\n")}
-
-CURRENT STREAKS:
-${data.streaks.length?data.streaks.map(s=>`- ${s.label}: ${s.streak} days`).join("\n"):"No active streaks"}
-
-Return ONLY valid JSON, no markdown:
-{"headline":"One punchy sentence","score_trend":"2-3 sentences on trend and momentum","winning":[{"category":"name","insight":"1 sentence"}],"needs_work":[{"category":"name","insight":"specific reason","fix":"concrete time-block tip referencing their AM/Mid/PM structure"}],"weekday_weekend":"observation or null","streak_momentum":"observation","priority_this_week":"single most impactful specific action"}
-
-2-3 winning items, 3-5 needs_work items. Be direct, reference actual categories and their time blocks.`;
-          const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":apiKey.trim(),"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,messages:[{role:"user",content:prompt}]})});
-          if(!res.ok){const e=await res.json();throw new Error(e.error?.message||`API error ${res.status}`);}
-          const json=await res.json();
-          const clean=json.content[0].text.replace(/```json|```/g,"").trim();
-          const parsed=JSON.parse(clean);
-          setAdvice(parsed);setAdvicePeriod(period);lsSet("tracker_advice",parsed);lsSet("tracker_advice_period",period);
-        }catch(e){setError(e.message||"Something went wrong. Check your API key.");}
-        setLoading(false);
-      }
-      return (
-        <div style={{padding:"0 16px 40px"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-            <div style={{fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:800,color:"#fff",letterSpacing:"0.05em"}}>🤖 AI COACH</div>
-            <div style={{display:"flex",gap:6}}>
-              {["week","month"].map(p=><button key={p} className="coach-period-btn" onClick={()=>setPeriod(p)} style={{background:period===p?"#1e1e2e":"transparent",color:period===p?"#e2e8f0":"#444",border:`1px solid ${period===p?"#2a2a3a":"transparent"}`}}>{p.toUpperCase()}</button>)}
+        {/* Legend */}
+        <div style={{ display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap" }}>
+          {[
+            ["#111", "None"],
+            ["#0d2a3d", "Daily"],
+            ["#c03a00", "Workout"],
+            ["#ff4d00", "Full Day"],
+          ].map(([color, label]) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <div style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
+              <span style={{ fontSize: 7, color: "#444", letterSpacing: 1 }}>{label}</span>
             </div>
-          </div>
-          <button className="coach-btn" onClick={generate} disabled={loading} style={{background:loading?"#1e1e2e":"linear-gradient(135deg,#1a237e,#1565c0)",color:loading?"#555":"#fff",marginBottom:16}}>
-            {loading?"⏳  ANALYZING YOUR DATA...":"✦  GENERATE COACHING ANALYSIS"}
-          </button>
-          {error&&<div style={{background:"#2a1a1a",border:"1px solid #ef444433",borderRadius:10,padding:"12px 14px",marginBottom:12,fontSize:12,color:"#f87171",lineHeight:1.6}}>{error}</div>}
-          {advice&&<div>
-            <div className="coach-section" style={{marginBottom:12}}>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:800,color:"#fff",lineHeight:1.4,marginBottom:8}}>{advice.headline}</div>
-              <div style={{fontSize:12,color:"#888",lineHeight:1.7}}>{advice.score_trend}</div>
+          ))}
+        </div>
+      </div>
+
+      {/* Workout breakdown */}
+      <div style={{ ...g.card, padding: "14px", marginTop: 10 }}>
+        <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase", marginBottom: 10 }}>By Type</div>
+        {WORKOUT_TYPES.map(t => {
+          const count = workoutTypeCounts[t] || 0;
+          const max = Math.max(...Object.values(workoutTypeCounts), 1);
+          return (
+            <div key={t} style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                <span style={{ fontSize: 9, color: "#777", letterSpacing: 1 }}>{ICON[t]} {t}</span>
+                <span style={{ fontSize: 9, color: "#555" }}>{count}</span>
+              </div>
+              <div style={{ height: 3, background: "#1a1a1a", borderRadius: 2 }}>
+                <div style={{ height: "100%", width: `${(count / max) * 100}%`, background: "#ff4d00", borderRadius: 2, transition: "width 0.5s" }} />
+              </div>
             </div>
-            <div className="insight-block tip" style={{marginBottom:12}}>
-              <div style={{fontSize:9,color:"#a855f7",letterSpacing:"0.15em",marginBottom:6}}>★ PRIORITY THIS WEEK</div>
-              <div style={{fontSize:13,color:"#e2e8f0",lineHeight:1.6}}>{advice.priority_this_week}</div>
-            </div>
-            {advice.needs_work?.length>0&&<div style={{marginBottom:12}}>
-              <div className="section-label" style={{marginBottom:8}}>NEEDS WORK</div>
-              {advice.needs_work.map((item,i)=><div key={i} className="insight-block warning" style={{marginBottom:8}}>
-                <div style={{fontSize:11,color:"#f59e0b",fontWeight:500,marginBottom:4}}>{item.category}</div>
-                <div style={{fontSize:12,color:"#aaa",lineHeight:1.6,marginBottom:6}}>{item.insight}</div>
-                <div style={{fontSize:12,color:"#e2e8f0",lineHeight:1.6,borderTop:"1px solid #2a2a3a",paddingTop:6}}>→ {item.fix}</div>
-              </div>)}
-            </div>}
-            {advice.winning?.length>0&&<div style={{marginBottom:12}}>
-              <div className="section-label" style={{marginBottom:8}}>GOING WELL</div>
-              {advice.winning.map((item,i)=><div key={i} className="insight-block success" style={{marginBottom:8}}>
-                <div style={{fontSize:11,color:"#22c55e",fontWeight:500,marginBottom:4}}>{item.category}</div>
-                <div style={{fontSize:12,color:"#aaa",lineHeight:1.6}}>{item.insight}</div>
-              </div>)}
-            </div>}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-              {advice.weekday_weekend&&advice.weekday_weekend!=="null"&&<div className="insight-block" style={{marginBottom:0}}><div style={{fontSize:9,color:"#3b82f6",letterSpacing:"0.12em",marginBottom:6}}>WD VS WE</div><div style={{fontSize:11,color:"#aaa",lineHeight:1.6}}>{advice.weekday_weekend}</div></div>}
-              {advice.streak_momentum&&<div className="insight-block" style={{marginBottom:0}}><div style={{fontSize:9,color:"#3b82f6",letterSpacing:"0.12em",marginBottom:6}}>MOMENTUM</div><div style={{fontSize:11,color:"#aaa",lineHeight:1.6}}>{advice.streak_momentum}</div></div>}
-            </div>
-            <div style={{fontSize:9,color:"#2a2a3a",textAlign:"center",letterSpacing:"0.1em",marginTop:4}}>LAST GENERATED FOR {advicePeriod?.toUpperCase()} — TAP TO REFRESH</div>
-          </div>}
-          <div style={{marginTop:20,paddingTop:16,borderTop:"1px solid #1a1a22"}}>
-            <div style={{fontSize:9,color:"#333",letterSpacing:"0.15em",marginBottom:8}}>ANTHROPIC API KEY</div>
-            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <input type={showKey?"text":"password"} placeholder="sk-ant-..." value={apiKey} onChange={e=>saveKey(e.target.value)}/>
-              <button onClick={()=>setShowKey(v=>!v)} style={{background:"none",border:"1px solid #2a2a3a",color:"#555",padding:"10px 12px",borderRadius:8,cursor:"pointer",fontSize:11,fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap"}}>{showKey?"HIDE":"SHOW"}</button>
-            </div>
-            <div style={{fontSize:9,color:"#2a2a3a",marginTop:6,letterSpacing:"0.08em"}}>KEY STORED LOCALLY ON YOUR DEVICE ONLY</div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── WORKOUT HISTORY CARD ──────────────────────────────────────────────────
+function WorkoutHistoryCard({ entry: e, onDelete }) {
+  const [expanded, setExpanded] = useState(false);
+  const totalSets = e.exercises?.reduce((a, ex) => a + ex.sets.filter(s => s.reps || s.weight).length, 0) || 0;
+  return (
+    <div style={{ ...g.card, overflow: "hidden" }}>
+      <div style={{ padding: "12px 14px", cursor: "pointer" }} onClick={() => setExpanded(x => !x)}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <span style={{ fontSize: 13 }}>{ICON[e.type]} <span style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "#888", marginLeft: 6 }}>{e.type}</span></span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={g.badge}>{e.date}</span>
+            <span style={{ fontSize: 9, color: "#555" }}>{expanded ? "▲" : "▼"}</span>
+            <button onClick={ev => { ev.stopPropagation(); onDelete(); }} style={{ background: "none", border: "1px solid #252525", color: "#555", padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono', monospace" }}>✕</button>
           </div>
         </div>
-      );
-    }
-
-    // ── Category Block Section ────────────────────────────────────────────────
-    function BlockSection({ block, cats, cur, editMode, onToggle, onSetMulti, onMove, totalCats, blockIdx }) {
-      const [collapsed, setCollapsed] = useState(false);
-      const blockCats = cats.filter(c=>c.block===block.id&&!c.penalty);
-      if (!blockCats.length) return null;
-      const earned = blockCats.reduce((s,c)=>s+getCatPoints(c,cur),0);
-      const possible = blockCats.reduce((s,c)=>{ if(c.multi){ const def=MULTI_CATEGORIES[c.key]; return s+Math.max(...(def?.options||[]).map(o=>o.value),0); } return s+c.points; },0);
-      const doneCount = blockCats.filter(c=>getCatPoints(c,cur)>0).length;
-
-      return (
-        <div style={{marginBottom:4}}>
-          <div className="block-header" onClick={()=>!editMode&&setCollapsed(v=>!v)}>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:14}}>{block.emoji}</span>
-              <span style={{fontFamily:"'Syne',sans-serif",fontSize:11,fontWeight:800,color:block.color,letterSpacing:"0.15em"}}>{block.label}</span>
-              <span className="block-pill" style={{background:block.color+"18",color:block.color}}>{doneCount}/{blockCats.length}</span>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:11,color:"#555",fontWeight:500}}>{earned>0?`+${earned}`:""}</span>
-              {!editMode&&<span style={{fontSize:12,color:"#333"}}>{collapsed?"▶":"▼"}</span>}
-            </div>
+        {e.exercises && <div style={{ fontSize: 10, color: "#555" }}>{e.exercises.map(ex => ex.name).join(" · ")}<span style={{ color: "#444", marginLeft: 8 }}>{totalSets} sets</span></div>}
+        {e.type === "run" && e.runData && (
+          <div style={{ fontSize: 10, color: "#666" }}>
+            {e.runData.distance && `${e.runData.distance} mi`}{e.runData.duration && ` · ${e.runData.duration}`}{e.runData.pace && ` · ${e.runData.pace} /mi`}
+            {e.runData.location && <span style={{ color: "#444" }}> · {e.runData.location}</span>}
+            {e.runData.feel && <span style={{ color: "#444" }}> · {e.runData.feel}</span>}
+            {e.runData.notes && <div style={{ fontSize: 9, color: "#333", marginTop: 3, fontStyle: "italic" }}>"{e.runData.notes}"</div>}
           </div>
-          {(!collapsed||editMode)&&blockCats.map((cat,idx)=>{
-            const allIdx = cats.findIndex(c=>c.key===cat.key);
-            const isFirst = allIdx===0;
-            const isLast = allIdx===cats.length-1;
-            if(cat.multi){
-              const def=MULTI_CATEGORIES[cat.key];
-              const val=typeof cur[cat.key]==="number"?cur[cat.key]:0;
-              const active=val>0;
-              return (
-                <div key={cat.key} style={{display:"flex",alignItems:"center",gap:4}}>
-                  {editMode&&<div className="reorder-col"><button className="reorder-btn" onClick={()=>onMove(cat.key,-1)} style={{opacity:isFirst?0.15:1}}>▲</button><button className="reorder-btn" onClick={()=>onMove(cat.key,1)} style={{opacity:isLast?0.15:1}}>▼</button></div>}
-                  <div className="multi-row" style={{flex:1,background:active?"#1a2a1e":"transparent"}}>
-                    <span style={{fontSize:16}}>{cat.emoji}</span>
-                    <span style={{flex:1,fontSize:13,color:active?"#86efac":"#c0c0d0"}}>{cat.label}</span>
-                    <div style={{display:"flex",gap:4}}>{def.options.map(o=><button key={o.value} className="seg-btn" onClick={()=>onSetMulti(cat.key,o.value)} style={{background:val===o.value?"#3b82f6":"#1e1e2a",color:val===o.value?"#fff":"#666"}}>{o.label}</button>)}</div>
-                    <span style={{fontSize:12,color:active?"#22c55e":"#444",fontWeight:500,minWidth:28,textAlign:"right"}}>+{val}</span>
-                  </div>
-                </div>
-              );
-            }
-            const checked=!!cur[cat.key];
+        )}
+      </div>
+
+      {expanded && e.exercises && (
+        <div style={{ borderTop: "1px solid #1a1a1a", padding: "10px 14px" }}>
+          {e.exercises.map((ex, i) => {
+            const filledSets = ex.sets.filter(s => s.reps || s.weight);
+            if (!filledSets.length) return null;
             return (
-              <div key={cat.key} style={{display:"flex",alignItems:"center",gap:4}}>
-                {editMode&&<div className="reorder-col"><button className="reorder-btn" onClick={()=>onMove(cat.key,-1)} style={{opacity:isFirst?0.15:1}}>▲</button><button className="reorder-btn" onClick={()=>onMove(cat.key,1)} style={{opacity:isLast?0.15:1}}>▼</button></div>}
-                <div className={`cat-row ${checked?"checked":""}`} style={{flex:1}} onClick={()=>!editMode&&onToggle(cat.key)}>
-                  <div className="check-box" onClick={e=>{e.stopPropagation();onToggle(cat.key);}}>
-                    {checked&&<svg width="13" height="10" viewBox="0 0 13 10"><polyline points="1,5 5,9 12,1" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                  </div>
-                  <span style={{fontSize:16}}>{cat.emoji}</span>
-                  <span style={{flex:1,fontSize:13,color:checked?"#86efac":"#c0c0d0"}}>{cat.label}</span>
-                  <span style={{fontSize:12,color:checked?"#22c55e":"#444",fontWeight:500}}>+{cat.points}</span>
+              <div key={i} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 9, letterSpacing: 2, color: "#ff4d00", textTransform: "uppercase", marginBottom: 6 }}>{ex.name}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "20px 1fr 1fr", gap: 4 }}>
+                  <span style={{ fontSize: 7, color: "#444" }}>#</span>
+                  <span style={{ fontSize: 7, color: "#444", letterSpacing: 1 }}>REPS</span>
+                  <span style={{ fontSize: 7, color: "#444", letterSpacing: 1 }}>LBS</span>
+                  {filledSets.map((s, j) => (
+                    <>
+                      <span key={`n${j}`} style={{ fontSize: 9, color: "#555" }}>{j + 1}</span>
+                      <span key={`r${j}`} style={{ fontSize: 11, color: "#ccc", fontWeight: 600 }}>{s.reps || "—"}</span>
+                      <span key={`w${j}`} style={{ fontSize: 11, color: "#ccc", fontWeight: 600 }}>{s.weight || "—"}</span>
+                    </>
+                  ))}
                 </div>
               </div>
             );
           })}
         </div>
-      );
-    }
+      )}
+    </div>
+  );
+}
 
-    // ── Weekend Commit List ───────────────────────────────────────────────────
-    function WeekendCommitList({ CATEGORIES, cur, onToggle, onSetMulti, commitKeys, setCommitKeys }) {
-      const [picking, setPicking] = useState(false);
-      const regular = CATEGORIES.filter(c=>!c.penalty);
-      const committed = regular.filter(c=>commitKeys.includes(c.key));
+// ── WHAT'S NEXT ───────────────────────────────────────────────────────────
+function WhatsNext({ history, onSelect }) {
+  if (!history.length) return null;
 
-      function toggleCommit(key) {
-        setCommitKeys(prev => prev.includes(key) ? prev.filter(k=>k!==key) : prev.length<8 ? [...prev,key] : prev);
-      }
+  const RECOVERY_HRS = { chest: 72, back: 72, legs: 96, shoulders: 72, biceps: 48, triceps: 48, run: 96 };
+  const ALL_TYPES = [...WORKOUT_TYPES.filter(t => t !== "vacation"), "run"];
+  const now = Date.now();
 
-      return (
-        <div style={{margin:"12px 16px 0",background:"linear-gradient(145deg,#0d1a0d,#131f13)",border:"1px solid #1e3a1e",borderRadius:16,overflow:"hidden"}}>
-          <div style={{padding:"14px 16px 10px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div>
-              <div style={{fontFamily:"'Syne',sans-serif",fontSize:12,fontWeight:800,color:"#22c55e",letterSpacing:"0.1em"}}>🎯 WEEKEND COMMIT LIST</div>
-              <div style={{fontSize:10,color:"#3b5a3b",marginTop:2}}>Pick up to 8 priorities for today</div>
+  const lastDone = {};
+  ALL_TYPES.forEach(t => {
+    const last = history.find(h => h.type === t);
+    if (last) lastDone[t] = new Date(last.date).getTime();
+  });
+
+  const scores = ALL_TYPES.map(t => {
+    const last = lastDone[t];
+    if (!last) return { type: t, daysSince: null, ready: true, score: 9999 };
+    const hrsSince = (now - last) / (1000 * 60 * 60);
+    const recovery = RECOVERY_HRS[t] || 72;
+    const daysSince = Math.floor(hrsSince / 24);
+    // Score by absolute hours since — more days = higher priority
+    // Subtract recovery hours so fully recovered types float to top
+    const score = hrsSince - recovery;
+    return { type: t, daysSince, ready: hrsSince >= recovery, score };
+  }).sort((a, b) => b.score - a.score);
+
+  // Separate run from strength for display
+  const strengthScores = scores.filter(s => s.type !== "run");
+  const runScore = scores.find(s => s.type === "run");
+  const top2 = strengthScores.slice(0, 2);
+
+  return (
+    <div style={{ ...g.card, padding: "14px 16px", marginBottom: 16, background: "#0a1a0a", border: "1px solid #1a3a1a" }}>
+      <div style={{ fontSize: 8, letterSpacing: 3, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 12 }}>◈ Recommended Today</div>
+      {top2.map((rec, idx) => (
+        <div key={rec.type} onClick={() => onSelect(rec.type)}
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", background: idx === 0 ? "#0f2a0f" : "#0a0a0a", border: `1px solid ${idx === 0 ? "#1a4a1a" : "#1a1a1a"}`, marginBottom: 8 }}>
+          <span style={{ fontSize: idx === 0 ? 26 : 20 }}>{ICON[rec.type]}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: idx === 0 ? 13 : 11, fontWeight: 700, color: idx === 0 ? "#e8e0d5" : "#888", letterSpacing: 2, textTransform: "uppercase" }}>{rec.type}</div>
+            <div style={{ fontSize: 8, color: "#555", marginTop: 2 }}>
+              {rec.daysSince === null ? "Never trained" : rec.daysSince === 0 ? "Trained today" : `${rec.daysSince}d ago`}
             </div>
-            <button onClick={()=>setPicking(v=>!v)} className="edit-mode-btn" style={{borderColor:picking?"#22c55e":"#2a2a3a",color:picking?"#22c55e":"#555"}}>
-              {picking?"DONE":"EDIT"}
-            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+            <span style={{ fontSize: 7, color: rec.ready ? "#3a9e4f" : "#c49a1a", border: `1px solid ${rec.ready ? "#1a4020" : "#3a2a00"}`, borderRadius: 3, padding: "2px 5px", letterSpacing: 1 }}>{rec.ready ? "READY" : "ALMOST"}</span>
+            <span style={{ fontSize: 9, color: "#444" }}>→</span>
+          </div>
+        </div>
+      ))}
+      {/* Run status line */}
+      {runScore && (
+        <div onClick={() => onSelect("run")}
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, cursor: "pointer", background: "#0a0a0f", border: `1px solid ${runScore.ready ? "#1a2a3a" : "#111"}`, marginTop: 0 }}>
+          <span style={{ fontSize: 16 }}>⚡</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#666", letterSpacing: 2, textTransform: "uppercase" }}>RUN</div>
+            <div style={{ fontSize: 8, color: "#444", marginTop: 1 }}>
+              {runScore.daysSince === null ? "No runs logged" : runScore.daysSince === 0 ? "Ran today" : `Last run ${runScore.daysSince}d ago · target every 4-5d`}
+            </div>
+          </div>
+          <span style={{ fontSize: 7, color: runScore.ready ? "#3a8fc4" : "#333", border: `1px solid ${runScore.ready ? "#0d2a3d" : "#1a1a1a"}`, borderRadius: 3, padding: "2px 5px", letterSpacing: 1 }}>
+            {runScore.daysSince === null ? "—" : runScore.ready ? "RUN TODAY" : `${runScore.daysSince}D`}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── WEEKLY SCORECARD ──────────────────────────────────────────────────────
+function WeeklyScorecard({ history, sleepLog, dailyLog }) {
+  const [analysis, setAnalysis] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, -1 = last week
+
+  // Get Mon-Sun of selected week
+  const getWeekBounds = (offset) => {
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun
+    const mon = new Date(now);
+    mon.setDate(now.getDate() - ((day + 6) % 7) + offset * 7);
+    mon.setHours(0, 0, 0, 0);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    sun.setHours(23, 59, 59, 999);
+    return { mon, sun };
+  };
+
+  const { mon, sun } = getWeekBounds(weekOffset);
+
+  const inRange = (dateStr) => {
+    const d = new Date(dateStr);
+    return d >= mon && d <= sun;
+  };
+
+  const weekWorkouts = history.filter(h => inRange(h.date));
+  const weekSleep = sleepLog.filter(s => inRange(s.date));
+  const weekDaily = dailyLog.filter(d => inRange(d.date));
+
+  const workoutDays = new Set(weekWorkouts.map(h => h.date)).size;
+  const totalSets = weekWorkouts.reduce((a, h) => a + (h.exercises?.reduce((b, e) => b + e.sets.filter(s => s.reps || s.weight).length, 0) || 0), 0);
+  const avgSleep = weekSleep.length ? (weekSleep.reduce((a, s) => a + (parseFloat(s.sleepScore) || 0), 0) / weekSleep.length).toFixed(0) : null;
+  const avgHrv = weekSleep.length ? (weekSleep.reduce((a, s) => a + (parseFloat(s.hrv) || 0), 0) / weekSleep.filter(s => s.hrv).length).toFixed(0) : null;
+
+  const weekLabel = weekOffset === 0 ? "This Week" : weekOffset === -1 ? "Last Week" : `${mon.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+
+  const runAnalysis = async () => {
+    setLoading(true);
+    setAnalysis(null);
+    const prompt = `You are an elite fitness coach giving a weekly scorecard review. Be direct, specific, and encouraging but honest.
+
+Week: ${mon.toLocaleDateString()} – ${sun.toLocaleDateString()}
+Workouts completed: ${weekWorkouts.length} sessions across ${workoutDays} days
+Total sets: ${totalSets}
+Workout types: ${weekWorkouts.map(h => h.type).join(", ") || "none"}
+${weekWorkouts.map(h => `- ${h.date} ${h.type}: ${h.exercises?.map(e => `${e.name} ${e.sets.filter(s=>s.reps||s.weight).length}sets`).join(", ") || h.runData?.distance + "mi"}`).join("\n")}
+
+Sleep data:
+${weekSleep.map(s => `- ${s.date}: score=${s.sleepScore}, HRV=${s.hrv}, hrs=${s.hoursSlept}`).join("\n") || "No sleep data"}
+
+Daily activity:
+${weekDaily.map(d => `- ${d.date}: steps=${d.steps}, crunches=${d.crunches}, pushups=${d.pushups}`).join("\n") || "No daily data"}
+
+Give a scorecard with:
+1. WEEK GRADE (A/B/C/D/F) with one sentence justification
+2. BEST MOMENT — single best performance or habit this week
+3. WEAK SPOT — one specific thing to improve
+4. NEXT WEEK TARGET — one concrete, measurable goal
+
+Keep it under 200 words. Be a tough but fair coach.`;
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 400, messages: [{ role: "user", content: prompt }] })
+      });
+      const data = await res.json();
+      setAnalysis(data.content?.[0]?.text || "Unable to generate scorecard.");
+    } catch(e) {
+      setAnalysis("Error generating scorecard. Check your connection.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div>
+      {/* Week selector */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <button onClick={() => { setWeekOffset(w => w - 1); setAnalysis(null); }} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11 }}>←</button>
+        <span style={{ fontSize: 10, color: "#888", letterSpacing: 2, textTransform: "uppercase" }}>{weekLabel}</span>
+        <button onClick={() => { setWeekOffset(w => Math.min(0, w + 1)); setAnalysis(null); }} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11, opacity: weekOffset >= 0 ? 0.3 : 1 }}>→</button>
+      </div>
+
+      {/* Stats row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+        {[
+          ["DAYS", workoutDays, "active"],
+          ["SESSIONS", weekWorkouts.length, "logged"],
+          ["SETS", totalSets, "total"],
+          ["SLEEP", avgSleep || "—", "avg score"],
+        ].map(([label, val, sub]) => (
+          <div key={label} style={{ ...g.card, padding: "10px 6px", textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#ff4d00", fontFamily: "'DM Mono', monospace" }}>{val}</div>
+            <div style={{ fontSize: 7, letterSpacing: 1, color: "#555", textTransform: "uppercase", marginTop: 2 }}>{label}</div>
+            <div style={{ fontSize: 7, color: "#333", marginTop: 1 }}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Day grid */}
+      <div style={{ ...g.card, padding: "12px 14px", marginBottom: 12 }}>
+        <div style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 8 }}>Week at a Glance</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+          {["M","T","W","T","F","S","S"].map((d, i) => {
+            const day = new Date(mon);
+            day.setDate(mon.getDate() + i);
+            const ds = day.toLocaleDateString();
+            const hasWorkout = weekWorkouts.some(h => h.date === ds);
+            const hasSleep = weekSleep.some(s => s.date === ds);
+            const isToday = day.toDateString() === new Date().toDateString();
+            const isFuture = day > new Date();
+            return (
+              <div key={i} style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 7, color: isToday ? "#ff4d00" : "#444", marginBottom: 3 }}>{d}</div>
+                <div style={{ height: 28, borderRadius: 4, background: isFuture ? "#0a0a0a" : hasWorkout ? "#ff4d00" : hasSleep ? "#0d2a3d" : "#141414", border: `1px solid ${isToday ? "#ff4d00" : "#1a1a1a"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {!isFuture && <span style={{ fontSize: 10 }}>{hasWorkout ? "💪" : hasSleep ? "😴" : ""}</span>}
+                </div>
+                <div style={{ fontSize: 7, color: "#333", marginTop: 2 }}>{day.getDate()}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* AI Scorecard */}
+      <button onClick={runAnalysis} disabled={loading}
+        style={{ ...g.primary, width: "100%", marginBottom: 12, background: loading ? "#1a1a1a" : "#ff4d00", fontSize: 10, letterSpacing: 2 }}>
+        {loading ? "⟳ GENERATING SCORECARD…" : "⚡ GENERATE WEEKLY SCORECARD"}
+      </button>
+
+      {analysis && (
+        <div style={{ ...g.card, padding: "16px" }}>
+          <div style={{ fontSize: 8, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase", marginBottom: 10 }}>⚡ Weekly Scorecard · {weekLabel}</div>
+          <div style={{ fontSize: 12, color: "#ccc", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{analysis}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── HISTORY TAB ───────────────────────────────────────────────────────────
+function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog, deleteDaily, sleepLog, setSleepLog, deleteSleep }) {
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState("log"); // "log" | "progress"
+  const [progressType, setProgressType] = useState(null);
+  const [analysis, setAnalysis] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+
+
+  const all = [
+    ...history.map(h => ({ ...h, _kind: "workout" })),
+    ...dailyLog.map(d => ({ ...d, _kind: "daily" })),
+    ...sleepLog.map(s => ({ ...s, _kind: "sleep" })),
+  ].sort((a, b) => b.id - a.id);
+
+  const q = search.toLowerCase();
+  const filtered = all.filter(e => {
+    if (!q) return true;
+    if (e._kind === "workout") return e.type?.includes(q) || e.date?.includes(q);
+    if (e._kind === "sleep") return e.date?.includes(q) || (e.sleepScore && String(e.sleepScore).includes(q));
+    if (e._kind === "daily") return e.date?.includes(q);
+    return true;
+  });
+
+  // Workout types with enough data for analysis (5+ sessions)
+  const workoutTypes = WORKOUT_TYPES.filter(t => history.filter(h => h.type === t).length >= 3);
+
+  const runAnalysis = async (type) => {
+    setProgressType(type);
+    setAnalysis(null);
+    setLoading(true);
+
+    const sessions = history.filter(h => h.type === type).slice(0, 20);
+    const sleep = sleepLog.slice(0, 20);
+
+    const prompt = type === "run"
+      ? `You are an expert running coach analyzing performance data. Here are the user's recent runs:
+${JSON.stringify(sessions.map(s => ({ date: s.date, ...s.runData })), null, 2)}
+
+Recent sleep/recovery data:
+${JSON.stringify(sleep.map(s => ({ date: s.date, sleepScore: s.sleepScore, readiness: s.readiness, hrv: s.hrv, hoursSlept: s.hoursSlept })), null, 2)}
+
+Provide a sharp, specific analysis covering:
+1. PERFORMANCE TREND — pace, distance, heart rate trajectory
+2. RECOVERY CORRELATION — how sleep/HRV correlates with run performance
+3. RECOMMENDATIONS — 2-3 specific, actionable improvements
+4. BASELINE vs NOW — where they started vs current form
+
+Be direct, data-driven, and specific. Use the actual numbers. Keep it under 300 words.`
+      : `You are an expert strength coach analyzing training data. Here are the user's recent ${type} sessions:
+${JSON.stringify(sessions.map(s => ({ date: s.date, exercises: s.exercises?.map(e => ({ name: e.name, sets: e.sets.filter(st => st.reps || st.weight) })) })), null, 2)}
+
+Recent sleep/recovery data:
+${JSON.stringify(sleep.map(s => ({ date: s.date, sleepScore: s.sleepScore, readiness: s.readiness, hrv: s.hrv, hoursSlept: s.hoursSlept })), null, 2)}
+
+Provide a sharp, specific analysis covering:
+1. STRENGTH TREND — which lifts are progressing, stalling, or regressing (use actual weights)
+2. VOLUME TREND — total sets/reps progression over time
+3. RECOVERY CORRELATION — how sleep quality/HRV correlates with performance
+4. RECOMMENDATIONS — 2-3 specific, actionable next steps with target numbers
+5. BASELINE vs NOW — estimated strength gains since first session
+
+Be direct, data-driven, specific. Use actual numbers from the data. Keep it under 350 words.`;
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+      const data = await res.json();
+      setAnalysis(data.content?.[0]?.text || "Unable to generate analysis.");
+    } catch (e) {
+      setAnalysis("Error connecting to analysis service. Please try again.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={g.page}>
+      {/* View toggle */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {["log", "progress", "heatmap", "scorecard"].map(v => (
+          <button key={v} onClick={() => setView(v)} style={{
+            flex: 1, padding: "9px 0", borderRadius: 8, cursor: "pointer",
+            fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: 1, textTransform: "uppercase",
+            border: `1px solid ${view === v ? "#ff4d00" : "#2a2a2a"}`,
+            background: view === v ? "#ff4d00" : "#141414",
+            color: view === v ? "#fff" : "#777", fontWeight: view === v ? 700 : 400
+          }}>{v === "progress" ? "AI ✦" : v === "heatmap" ? "MAP ◈" : v === "scorecard" ? "WEEK ⚡" : "LOG"}</button>
+        ))}
+      </div>
+
+      {/* PROGRESS VIEW */}
+      {view === "progress" && (
+        <div>
+          <span style={g.label}>AI Coach — Select Workout</span>
+          {workoutTypes.length === 0 && (
+            <div style={{ ...g.card, padding: "20px 16px", textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "#555", lineHeight: 1.8 }}>Log at least 3 sessions of any workout type to unlock AI progress analysis.</div>
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+            {workoutTypes.map(t => (
+              <button key={t} onClick={() => runAnalysis(t)} style={{
+                background: progressType === t ? "#1c1008" : "#141414",
+                border: `1px solid ${progressType === t ? "#ff4d00" : "#1e1e1e"}`,
+                color: "#e8e0d5", padding: "14px 10px", borderRadius: 10, cursor: "pointer",
+                fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2,
+                textTransform: "uppercase", display: "flex", flexDirection: "column", alignItems: "center", gap: 6
+              }}>
+                <span style={{ fontSize: 22 }}>{ICON[t]}</span>
+                {t}
+                <span style={{ fontSize: 8, color: "#555" }}>{history.filter(h => h.type === t).length} sessions</span>
+              </button>
+            ))}
           </div>
 
-          {picking?(
-            <div style={{padding:"0 12px 12px",maxHeight:300,overflowY:"auto"}}>
-              <div style={{fontSize:9,color:"#3b5a3b",letterSpacing:"0.12em",padding:"0 4px",marginBottom:6}}>{commitKeys.length}/8 SELECTED</div>
-              {regular.map(cat=>{
-                const sel=commitKeys.includes(cat.key);
-                return <div key={cat.key} className="commit-item" onClick={()=>toggleCommit(cat.key)} style={{background:sel?"#1a2a1a":"transparent"}}>
-                  <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${sel?"#22c55e":"#2a2a3a"}`,background:sel?"#22c55e":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    {sel&&<svg width="10" height="8" viewBox="0 0 10 8"><polyline points="1,4 4,7 9,1" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                  </div>
-                  <span style={{fontSize:14}}>{cat.emoji}</span>
-                  <span style={{flex:1,fontSize:13,color:sel?"#86efac":"#888"}}>{cat.label}</span>
-                  <span style={{fontSize:11,color:sel?"#22c55e":"#333"}}>+{cat.points}</span>
-                </div>;
-              })}
+          {loading && (
+            <div style={{ ...g.card, padding: "24px 16px", textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "#ff4d00", letterSpacing: 3, textTransform: "uppercase" }}>Analyzing…</div>
+              <div style={{ fontSize: 10, color: "#444", marginTop: 8 }}>Processing your training data</div>
             </div>
-          ):(
-            <div style={{padding:"0 12px 12px"}}>
-              {committed.length===0?(
-                <div style={{textAlign:"center",color:"#2a4a2a",fontSize:12,padding:"16px 0"}}>Tap EDIT to pick your priorities</div>
-              ):committed.map(cat=>{
-                const checked=cat.multi?(typeof cur[cat.key]==="number"&&cur[cat.key]>0):!!cur[cat.key];
-                const def=cat.multi?MULTI_CATEGORIES[cat.key]:null;
-                return (
-                  <div key={cat.key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 4px",borderBottom:"1px solid #1a2a1a"}}>
-                    <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${checked?"#22c55e":"#2a3a2a"}`,background:checked?"#22c55e":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer"}}
-                      onClick={()=>!cat.multi&&onToggle(cat.key)}>
-                      {checked&&<svg width="10" height="8" viewBox="0 0 10 8"><polyline points="1,4 4,7 9,1" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          )}
+
+          {analysis && !loading && (
+            <div style={{ ...g.card, padding: "18px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, borderBottom: "1px solid #1e1e1e", paddingBottom: 12 }}>
+                <span style={{ fontSize: 16 }}>{ICON[progressType]}</span>
+                <span style={{ fontSize: 9, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase" }}>{progressType} · AI Analysis</span>
+              </div>
+              <div style={{ fontSize: 12, color: "#ccc", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>{analysis}</div>
+              <button onClick={() => runAnalysis(progressType)} style={{ ...g.ghost, width: "100%", marginTop: 14, fontSize: 9 }}>↺ REFRESH ANALYSIS</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SCORECARD VIEW */}
+      {view === "scorecard" && (
+        <WeeklyScorecard history={history} sleepLog={sleepLog} dailyLog={dailyLog} />
+      )}
+
+      {/* HEATMAP VIEW */}
+      {view === "heatmap" && (
+        <ConsistencyHeatmap history={history} dailyLog={dailyLog} sleepLog={sleepLog} />
+      )}
+
+      {/* LOG VIEW */}
+      {view === "log" && (
+        <>
+          <div style={{ marginBottom: 16 }}>
+            <input style={{ ...g.input, fontSize: 13 }} placeholder="Search by date, type, score…" value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          {filtered.length === 0 && (
+            <div style={{ textAlign: "center", color: "#444", fontSize: 11, marginTop: 40 }}>No entries found</div>
+          )}
+          {filtered.map(e => {
+            if (e._kind === "workout") return (
+              <WorkoutHistoryCard key={e.id} entry={e} onDelete={() => deleteWorkout(e.id)} />
+            );
+            if (e._kind === "daily") return (
+              <div key={e.id} style={{ ...g.card, padding: "12px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "#888" }}>DAILY</span>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <span style={g.badge}>{e.date}</span>
+                    <button onClick={() => deleteDaily(e.id)} style={{ background: "none", border: "1px solid #252525", color: "#555", padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono', monospace" }}>✕</button>
+                  </div>
+                </div>
+                <div style={{ fontSize: 10, color: "#666" }}>
+                  {e.steps && <span>↳ {parseInt(e.steps).toLocaleString()} steps · </span>}
+                  ✦ {e.crunches || 0} · ◆ {e.planks || 0} · ▲ {e.pushups || 0}
+                  {e.stretches?.length > 0 && <span style={{ color: "#3a9e4f" }}> · 🧘 {e.stretches.join(", ")}</span>}
+                </div>
+              </div>
+            );
+            if (e._kind === "sleep") {
+              const sc = scoreColor(e.sleepScore);
+              const rc = scoreColor(e.readiness);
+              return (
+                <div key={e.id} style={{ ...g.card, padding: "12px 14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                      {e.sleepScore && <span style={{ fontSize: 16, fontWeight: 700, color: sc, fontFamily: "'DM Mono', monospace" }}>{e.sleepScore} <span style={{ fontSize: 7, color: sc, letterSpacing: 2 }}>SLEEP</span></span>}
+                      {e.readiness && <span style={{ fontSize: 16, fontWeight: 700, color: rc, fontFamily: "'DM Mono', monospace" }}>{e.readiness} <span style={{ fontSize: 7, color: rc, letterSpacing: 2 }}>READY</span></span>}
                     </div>
-                    <span style={{fontSize:15}}>{cat.emoji}</span>
-                    <span style={{flex:1,fontSize:13,color:checked?"#86efac":"#c0c0d0",textDecoration:checked?"line-through":"none"}}>{cat.label}</span>
-                    {cat.multi&&def?(
-                      <div style={{display:"flex",gap:3}}>{def.options.map(o=><button key={o.value} className="seg-btn" onClick={()=>onSetMulti(cat.key,o.value)} style={{background:(cur[cat.key]||0)===o.value?"#22c55e":"#1e2a1e",color:(cur[cat.key]||0)===o.value?"#fff":"#555",padding:"3px 7px",fontSize:10}}>{o.label}</button>)}</div>
-                    ):<span style={{fontSize:11,color:checked?"#22c55e":"#333"}}>+{cat.points}</span>}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={g.badge}>{e.date}</span>
+                      <button onClick={() => deleteSleep(e.id)} style={{ background: "none", border: "1px solid #252525", color: "#555", padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono', monospace" }}>✕</button>
+                    </div>
                   </div>
-                );
-              })}
-              {committed.length>0&&(
-                <div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px 0"}}>
-                  <span style={{fontSize:10,color:"#3b5a3b"}}>{committed.filter(c=>c.multi?(cur[c.key]||0)>0:!!cur[c.key]).length}/{committed.length} done</span>
-                  <span style={{fontSize:10,color:"#22c55e",fontWeight:500}}>+{committed.reduce((s,c)=>s+getCatPoints(c,cur),0)} pts</span>
+                  <div style={{ fontSize: 10, color: "#666" }}>
+                    {e.hoursSlept && `◑ ${e.hoursSlept}h`}{e.rem && ` · ◎ ${e.rem}rem`}{e.heartRate && ` · ♡ ${e.heartRate}`}{e.hrv && ` · ∿ ${e.hrv}`}{e.jhSpread && ` · ⚖ ${parseFloat(e.jhSpread) > 0 ? "+" : ""}${e.jhSpread}`}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    }
+              );
+            }
+            return null;
+          })}
+        </>
+      )}
+    </div>
+  );
+}
 
-    // ── Broker Edit Panel ────────────────────────────────────────────────────────
-    function BrokerEditPanel({ broker, updateBroker, deleteBroker }) {
-      return (
-        <div style={{padding:"0 14px 14px",borderTop:"1px solid #1a1a22"}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12,marginBottom:10}}>
-            <div>
-              <div style={{fontSize:9,color:"#555",letterSpacing:"0.12em",marginBottom:6}}>LAST CATCHUP</div>
-              <input type="date" value={broker.lastDate||""} onChange={e=>updateBroker(broker.name,"lastDate",e.target.value)}
-                style={{background:"#1a1a22",border:"1px solid #2a2a3a",color:"#e2e8f0",borderRadius:8,padding:"8px 10px",fontFamily:"'DM Mono',monospace",fontSize:12,outline:"none",width:"100%"}}/>
-            </div>
-            <div>
-              <div style={{fontSize:9,color:"#3b82f6",letterSpacing:"0.12em",marginBottom:6}}>NEXT MEETING</div>
-              <input type="date" value={broker.nextDate||""} onChange={e=>updateBroker(broker.name,"nextDate",e.target.value)}
-                style={{background:"#1a1a22",border:"1px solid #1e2a3a",color:"#e2e8f0",borderRadius:8,padding:"8px 10px",fontFamily:"'DM Mono',monospace",fontSize:12,outline:"none",width:"100%"}}/>
-            </div>
-          </div>
-          <div style={{marginBottom:10}}>
-            <div style={{fontSize:9,color:"#555",letterSpacing:"0.12em",marginBottom:6}}>NOTES</div>
-            <textarea rows={2} value={broker.notes||""} onChange={e=>updateBroker(broker.name,"notes",e.target.value)}
-              placeholder="What did you discuss..." style={{fontSize:12}}/>
-          </div>
-          <div style={{display:"flex",justifyContent:"flex-end"}}>
-            <button onClick={()=>deleteBroker(broker.name)} style={{background:"none",border:"1px solid #2a2a3a",color:"#555",fontSize:10,fontFamily:"'DM Mono',monospace",padding:"4px 10px",borderRadius:6,cursor:"pointer",letterSpacing:"0.08em"}}>REMOVE</button>
-          </div>
-        </div>
-      );
-    }
+// ── SUPABASE CLIENT ────────────────────────────────────────────────────────
+const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
-    // ── Outfit Picker ────────────────────────────────────────────────────────────
-    function OutfitPicker({ value, onChange, allClothes }) {
-      const [showDropdown, setShowDropdown] = useState(false);
-      const [inputVal, setInputVal] = useState(value);
+async function sbFetch(table, method, body = null, match = null) {
+  let url = `${SUPABASE_URL}/rest/v1/${table}`;
+  if (match) url += `?${new URLSearchParams(match)}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Prefer": method === "POST" ? "return=representation" : "return=minimal",
+    },
+    body: body ? JSON.stringify(body) : null,
+  });
+  if (method === "GET") return res.json();
+  return res;
+}
 
-      // Sync input when date changes
-      useEffect(() => { setInputVal(value); }, [value]);
+// Generate or retrieve a stable user ID stored in localStorage
+function getUserId() {
+  let uid = localStorage.getItem("rep_uid");
+  if (!uid) {
+    uid = "user_" + Math.random().toString(36).slice(2, 11);
+    localStorage.setItem("rep_uid", uid);
+  }
+  return uid;
+}
 
-      // Build unique outfit list sorted by frequency
-      const outfitHistory = useMemo(() => {
-        const freq = {};
-        Object.values(allClothes).forEach(outfit => {
-          if (!outfit || !outfit.trim()) return;
-          const key = outfit.trim().toLowerCase();
-          freq[key] = { label: outfit.trim(), count: (freq[key]?.count || 0) + 1 };
-        });
-        return Object.values(freq).sort((a,b) => a.label.localeCompare(b.label)).map(o => o.label);
-      }, [allClothes]);
+// ── ROOT ───────────────────────────────────────────────────────────────────
+export default function App() {
+  const [tab, setTab] = useState("workout");
+  const [loading, setLoading] = useState(true);
+  const userId = getUserId();
 
-      const filtered = inputVal
-        ? outfitHistory.filter(o => o.toLowerCase().includes(inputVal.toLowerCase()) && o.toLowerCase() !== inputVal.toLowerCase())
-        : outfitHistory;
+  const [history, setHistory] = useState([]);
+  const [dailyLog, setDailyLog] = useState([]);
+  const [sleepLog, setSleepLog] = useState([]);
 
-      function select(outfit) {
-        setInputVal(outfit);
-        onChange(outfit);
-        setShowDropdown(false);
-      }
+  // Load all data from Supabase on mount
+  useEffect(() => {
+    async function loadData() {
+      try {
+        let uid = userId;
+        // Try loading with current ID first
+        const [w, d, s] = await Promise.all([
+          sbFetch("workouts", "GET", null, { user_id: `eq.${uid}`, order: "created_at.desc" }),
+          sbFetch("daily_logs", "GET", null, { user_id: `eq.${uid}`, order: "created_at.desc" }),
+          sbFetch("sleep_logs", "GET", null, { user_id: `eq.${uid}`, order: "created_at.desc" }),
+        ]);
+        const workouts = Array.isArray(w) ? w : [];
+        const daily = Array.isArray(d) ? d : [];
+        const sleep = Array.isArray(s) ? s : [];
 
-      function handleChange(e) {
-        setInputVal(e.target.value);
-        onChange(e.target.value);
-        setShowDropdown(true);
-      }
-
-      return (
-        <div style={{position:"relative"}}>
-          <div style={{display:"flex",gap:8}}>
-            <input type="text" placeholder="What are you wearing today?"
-              value={inputVal} onChange={handleChange}
-              onFocus={()=>setShowDropdown(true)}
-              style={{flex:1}}/>
-            <button onClick={()=>setShowDropdown(v=>!v)}
-              style={{background:"#1a1a22",border:"1px solid #2a2a3a",color:"#666",padding:"0 12px",borderRadius:8,cursor:"pointer",fontSize:14,flexShrink:0}}>
-              ▾
-            </button>
-          </div>
-          {showDropdown && filtered.length > 0 && (
-            <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#13131c",border:"1px solid #2a2a3a",borderRadius:10,marginTop:4,zIndex:100,maxHeight:220,overflowY:"auto",boxShadow:"0 8px 24px #00000088"}}>
-              {filtered.map((outfit, i) => (
-                <div key={i} onClick={()=>select(outfit)}
-                  style={{padding:"10px 14px",fontSize:13,color:"#c0c0d0",borderBottom:"1px solid #1a1a22",cursor:"pointer"}}
-                  onMouseEnter={e=>e.target.style.background="#1e1e2a"}
-                  onMouseLeave={e=>e.target.style.background="transparent"}>
-                  {outfit}
-                </div>
-              ))}
-            </div>
-          )}
-          {showDropdown && <div style={{position:"fixed",inset:0,zIndex:99}} onClick={()=>setShowDropdown(false)}/>}
-        </div>
-      );
-    }
-
-    // ── Main App ──────────────────────────────────────────────────────────────
-    function App() {
-      const today = getTodayStr();
-      const [selectedDate, setSelectedDate] = useState(today);
-      const [entries, setEntries] = useState(() => lsGet("tracker_entries", {}));
-      const [clothes, setClothes] = useState(() => lsGet("tracker_clothes", {}));
-      const [socialNotes, setSocialNotes] = useState(() => lsGet("tracker_social", {}));
-      const [catOrder, setCatOrder] = useState(() => lsGet("tracker_cat_order", null));
-      const [catBlocks, setCatBlocks] = useState(() => lsGet("tracker_cat_blocks", {}));
-      const [commitKeys, setCommitKeysState] = useState(() => lsGet("tracker_commit_keys", []));
-      const [view, setView] = useState("today");
-      const [histTab, setHistTab] = useState("overview");
-      const [drillCat, setDrillCat] = useState(null);
-      const [editMode, setEditMode] = useState(false);
-      const [saveFlash, setSaveFlash] = useState(false);
-      const [showMidday, setShowMidday] = useState(true);
-      const [logsTab, setLogsTab] = useState("outfit");
-      const [brokers, setBrokersState] = useState(() => lsGet("tracker_brokers", {
-        "GS": {name:"GS",lastDate:"",nextDate:"",notes:""}, "MS": {name:"MS",lastDate:"",nextDate:"",notes:""},
-        "JPM": {name:"JPM",lastDate:"",nextDate:"",notes:""}, "BAML": {name:"BAML",lastDate:"",nextDate:"",notes:""},
-        "Citi": {name:"Citi",lastDate:"",nextDate:"",notes:""}, "RBC": {name:"RBC",lastDate:"",nextDate:"",notes:""},
-        "Wells": {name:"Wells",lastDate:"",nextDate:"",notes:""}, "UBS": {name:"UBS",lastDate:"",nextDate:"",notes:""},
-        "Jefferies": {name:"Jefferies",lastDate:"",nextDate:"",notes:""}, "Baird": {name:"Baird",lastDate:"",nextDate:"",notes:""},
-        "William Blair": {name:"William Blair",lastDate:"",nextDate:"",notes:""}, "Truist": {name:"Truist",lastDate:"",nextDate:"",notes:""},
-        "Stifel": {name:"Stifel",lastDate:"",nextDate:"",notes:""}, "Piper Sandler": {name:"Piper Sandler",lastDate:"",nextDate:"",notes:""},
-        "Nomura": {name:"Nomura",lastDate:"",nextDate:"",notes:""}, "Evercore": {name:"Evercore",lastDate:"",nextDate:"",notes:""},
-        "FBN": {name:"FBN",lastDate:"",nextDate:"",notes:""}, "Cowen": {name:"Cowen",lastDate:"",nextDate:"",notes:""},
-        "BTIG": {name:"BTIG",lastDate:"",nextDate:"",notes:""}, "Canaccord": {name:"Canaccord",lastDate:"",nextDate:"",notes:""}
-      }));
-      const [brokerExpanded, setBrokerExpanded] = useState(null);
-      const [newBrokerName, setNewBrokerName] = useState("");
-
-      useEffect(() => {
-        function onVisible() { if(document.visibilityState==="visible") setSelectedDate(getTodayStr()); }
-        document.addEventListener("visibilitychange", onVisible);
-        window.addEventListener("focus", onVisible);
-        return () => { document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", onVisible); };
-      }, []);
-
-      const [syncStatus, setSyncStatus] = useState("idle"); // idle | saving | saved | error
-
-      // Load from Firebase on mount
-      useEffect(() => {
-        setSyncStatus("saving");
-        TRACKER_DOC.get().then(doc => {
-          if (doc.exists) {
-            const d = doc.data();
-            if (d.entries) { setEntries(d.entries); lsSet("tracker_entries", d.entries); }
-            if (d.clothes) { setClothes(d.clothes); lsSet("tracker_clothes", d.clothes); }
-            if (d.socialNotes) { setSocialNotes(d.socialNotes); lsSet("tracker_social", d.socialNotes); }
-            if (d.catOrder) { setCatOrder(d.catOrder); lsSet("tracker_cat_order", d.catOrder); }
-            if (d.commitKeys) { setCommitKeysState(d.commitKeys); lsSet("tracker_commit_keys", d.commitKeys); }
-            if (d.brokers) { setBrokersState(d.brokers); lsSet("tracker_brokers", d.brokers); }
+        // If no data found, try to find any existing user data in Supabase
+        if (workouts.length === 0 && daily.length === 0 && sleep.length === 0) {
+          // Fetch recent sleep logs without user filter to find the real user ID
+          const allSleep = await sbFetch("sleep_logs", "GET", null, { order: "created_at.desc", limit: "1" });
+          if (Array.isArray(allSleep) && allSleep.length > 0) {
+            const realUid = allSleep[0].user_id;
+            if (realUid && realUid !== uid) {
+              // Found a different user ID — use it and save it
+              localStorage.setItem("rep_uid", realUid);
+              const [w2, d2, s2] = await Promise.all([
+                sbFetch("workouts", "GET", null, { user_id: `eq.${realUid}`, order: "created_at.desc" }),
+                sbFetch("daily_logs", "GET", null, { user_id: `eq.${realUid}`, order: "created_at.desc" }),
+                sbFetch("sleep_logs", "GET", null, { user_id: `eq.${realUid}`, order: "created_at.desc" }),
+              ]);
+              setHistory(Array.isArray(w2) ? w2.map(r => r.data) : []);
+              setDailyLog(Array.isArray(d2) ? d2.map(r => r.data) : []);
+              setSleepLog(Array.isArray(s2) ? s2.map(r => r.data) : []);
+              setLoading(false);
+              return;
+            }
           }
-          setSyncStatus("idle");
-        }).catch(err => {
-          console.warn("Firebase load failed, using localStorage:", err);
-          setSyncStatus("idle");
-        });
-      }, []);
+        }
 
-      const persist = useCallback((e,c,s) => {
-        lsSet("tracker_entries",e); lsSet("tracker_clothes",c); lsSet("tracker_social",s);
-        setSaveFlash(true); setTimeout(()=>setSaveFlash(false),1200);
-        setSyncStatus("saving");
-        TRACKER_DOC.set({ entries:e, clothes:c, socialNotes:s }, { merge:true })
-          .then(() => { setSyncStatus("saved"); setTimeout(()=>setSyncStatus("idle"),2000); })
-          .catch(() => setSyncStatus("error"));
-      },[]);
-
-      function setCommitKeys(val) { const v=typeof val==="function"?val(commitKeys):val; setCommitKeysState(v); lsSet("tracker_commit_keys",v); }
-
-      function saveBrokers(updated) {
-        setBrokersState(updated);
-        lsSet("tracker_brokers", updated);
-        // Also sync to Firebase
-        TRACKER_DOC.set({ brokers: updated }, { merge: true }).catch(()=>{});
+        setHistory(workouts.map(r => r.data));
+        setDailyLog(daily.map(r => r.data));
+        setSleepLog(sleep.map(r => r.data));
+      } catch(e) {
+        console.error("Load error", e);
       }
-      function updateBroker(key, field, val) {
-        const updated = { ...brokers, [key]: { ...brokers[key], [field]: val } };
-        saveBrokers(updated);
-      }
-      function addBroker() {
-        const name = newBrokerName.trim();
-        if (!name || brokers[name]) return;
-        const updated = { ...brokers, [name]: { name, lastDate: "", nextDate: "", notes: "" } };
-        saveBrokers(updated);
-        setNewBrokerName("");
-      }
-      function deleteBroker(key) {
-        const updated = { ...brokers };
-        delete updated[key];
-        saveBrokers(updated);
-        if (brokerExpanded === key) setBrokerExpanded(null);
-      }
-
-      const CATEGORIES = useMemo(() => buildOrderedCats(catOrder, catBlocks), [catOrder, catBlocks]);
-      const regular = CATEGORIES.filter(c=>!c.penalty);
-      const penalties = CATEGORIES.filter(c=>c.penalty);
-
-      function toggle(key) { const c=entries[selectedDate]||{}; const ne={...entries,[selectedDate]:{...c,[key]:!c[key]}}; setEntries(ne); persist(ne,clothes,socialNotes); }
-      function setMulti(key,val) { const c=entries[selectedDate]||{}; const ne={...entries,[selectedDate]:{...c,[key]:val}}; setEntries(ne); persist(ne,clothes,socialNotes); }
-      function setCloth(val) { const nc={...clothes,[selectedDate]:val}; setClothes(nc); persist(entries,nc,socialNotes); }
-      function setSocial(val) { const ns={...socialNotes,[selectedDate]:val}; setSocialNotes(ns); persist(entries,clothes,ns); }
-
-      function moveItem(key, direction) {
-        const current=[...CATEGORIES]; const idx=current.findIndex(c=>c.key===key); const newIdx=idx+direction;
-        if(newIdx<0||newIdx>=current.length) return;
-        if(current[idx].penalty!==current[newIdx].penalty) return;
-        [current[idx],current[newIdx]]=[current[newIdx],current[idx]];
-        const newOrder=current.map(c=>c.key); setCatOrder(newOrder); lsSet("tracker_cat_order",newOrder);
-      }
-
-      const cur = entries[selectedDate]||{};
-      const total = CATEGORIES.reduce((s,c)=>s+getCatPoints(c,cur),0);
-      const goal = isWeekend(selectedDate)?WEEKEND_GOAL:WEEKDAY_GOAL;
-      const pct = Math.min(Math.round((total/goal)*100),100);
-      const prog = Math.min((total/goal)*100,100);
-      const circ = 2*Math.PI*38;
-      const dash = (prog/100)*circ;
-      const ring = total>=goal?"#22c55e":total>=goal*0.8?"#f59e0b":"#3b82f6";
-
-      // Midday check-in data
-      const isToday = selectedDate===today;
-      const showMiddayBanner = isToday && isMidday() && showMidday && view==="today";
-      const currentBlock = getCurrentBlock();
-      const blockCatsLeft = regular.filter(c=>c.block===currentBlock&&getCatPoints(c,cur)===0);
-      const blockPtsLeft = blockCatsLeft.reduce((s,c)=>s+(c.multi?0:c.points),0);
-
-      const sortedDates = useMemo(()=>Object.keys(entries).sort((a,b)=>a.localeCompare(b)),[entries]);
-      const allTotals = useMemo(()=>sortedDates.map(d=>({date:d,val:getDayTotal(CATEGORIES,entries[d]||{}),goal:isWeekend(d)?WEEKEND_GOAL:WEEKDAY_GOAL,hit:getDayTotal(CATEGORIES,entries[d]||{})>=(isWeekend(d)?WEEKEND_GOAL:WEEKDAY_GOAL)})),[sortedDates,entries,CATEGORIES]);
-      const runningAvg=allTotals.length?Math.round(allTotals.reduce((s,d)=>s+d.val,0)/allTotals.length):0;
-      const goalHitRate=allTotals.length?Math.round((allTotals.filter(d=>d.hit).length/allTotals.length)*100):0;
-      const best=allTotals.length?Math.max(...allTotals.map(d=>d.val)):0;
-      const last30=allTotals.slice(-30);
-      const catStats=useMemo(()=>CATEGORIES.filter(c=>!c.penalty).map(cat=>{ const days=sortedDates.filter(d=>entries[d]); const done=days.filter(d=>getCatPoints(cat,entries[d]||{})>0).length; return{cat,done,total:days.length,pct:days.length?Math.round((done/days.length)*100):0}; }).sort((a,b)=>b.pct-a.pct),[sortedDates,entries,CATEGORIES]);
-
-      if(view==="history"&&drillCat) return (
-        <div style={{minHeight:"100vh",background:"#0f0f13",color:"#e2e8f0",fontFamily:"'DM Mono',monospace",maxWidth:480,margin:"0 auto",paddingBottom:80}}>
-          <div style={{margin:"16px 16px 0",background:"linear-gradient(145deg,#13131c,#1a1a28)",border:"1px solid #23233a",borderRadius:20,overflow:"hidden"}}>
-            <div style={{padding:"14px 20px",display:"flex",alignItems:"center"}}><div style={{fontFamily:"'Syne',sans-serif",fontSize:28,fontWeight:800,color:"#fff"}}>{total} <span style={{fontSize:14,color:"#444",fontWeight:400}}>/ {goal}</span></div></div>
-            <div style={{display:"flex",borderTop:"1px solid #1c1c2e"}}>
-              {["today","history","logs"].map(t=><button key={t} className="tab-btn" onClick={()=>{setView(t);setDrillCat(null);}} style={{color:view===t?"#fff":"#444",borderBottom:view===t?`2px solid ${ring}`:"2px solid transparent"}}>{t.toUpperCase()}</button>)}
-            </div>
-          </div>
-          <CategoryDrillChart cat={drillCat} entries={entries} onBack={()=>setDrillCat(null)}/>
-        </div>
-      );
-
-      return (
-        <div style={{minHeight:"100vh",background:"#0f0f13",color:"#e2e8f0",fontFamily:"'DM Mono',monospace",maxWidth:480,margin:"0 auto",paddingBottom:80}}>
-
-          {/* HERO */}
-          <div style={{margin:"16px 16px 0",background:"linear-gradient(145deg,#13131c,#1a1a28)",border:"1px solid #23233a",borderRadius:20,overflow:"hidden",position:"relative"}}>
-            <div style={{position:"absolute",right:24,top:"50%",transform:"translateY(-50%)",width:140,height:140,borderRadius:"50%",background:`radial-gradient(circle,${ring}22,transparent 70%)`,transition:"background 0.6s",pointerEvents:"none"}}/>
-            <div style={{padding:"20px 20px 16px",display:"flex",alignItems:"center",gap:20,position:"relative"}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:11,fontWeight:700,letterSpacing:"0.22em",color:"#444"}}>DAILY TRACKER</div>
-                  {syncStatus==="saving"&&<div style={{fontSize:9,color:"#f59e0b",letterSpacing:"0.12em",background:"#f59e0b18",padding:"2px 6px",borderRadius:4}}>SYNCING</div>}
-                  {syncStatus==="saved"&&<div style={{fontSize:9,color:"#22c55e",letterSpacing:"0.12em",background:"#22c55e18",padding:"2px 6px",borderRadius:4}}>SYNCED ☁️</div>}
-                  {syncStatus==="error"&&<div style={{fontSize:9,color:"#ef4444",letterSpacing:"0.12em",background:"#ef444418",padding:"2px 6px",borderRadius:4}}>OFFLINE</div>}
-                  {saveFlash&&syncStatus==="idle"&&<div style={{fontSize:9,color:"#22c55e",letterSpacing:"0.12em",background:"#22c55e18",padding:"2px 6px",borderRadius:4}}>SAVED</div>}
-                </div>
-                <div style={{display:"flex",alignItems:"baseline",gap:6,margin:"6px 0 10px"}}>
-                  <span style={{fontFamily:"'Syne',sans-serif",fontSize:52,fontWeight:800,color:"#fff",lineHeight:1,letterSpacing:"-0.03em"}}>{total}</span>
-                  <span style={{fontSize:18,color:"#333",fontWeight:300}}>/</span>
-                  <span style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:700,color:"#444"}}>{goal}</span>
-                </div>
-                <div style={{height:3,background:"#1e1e2e",borderRadius:2,marginBottom:10,overflow:"hidden"}}>
-                  <div style={{height:"100%",borderRadius:2,width:`${prog}%`,background:`linear-gradient(90deg,${ring}99,${ring})`,transition:"width 0.4s ease,background 0.4s"}}/>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                  <input type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}/>
-                  <div style={{width:1,height:10,background:"#2a2a3a"}}/>
-                  <div style={{fontSize:11,color:isWeekend(selectedDate)?"#f59e0b":"#3b82f6",letterSpacing:"0.08em"}}>{isWeekend(selectedDate)?"WEEKEND":"WEEKDAY"}</div>
-                  {selectedDate!==today&&<><div style={{width:1,height:10,background:"#2a2a3a"}}/><button onClick={()=>setSelectedDate(today)} style={{background:"none",border:"none",color:"#555",fontSize:11,fontFamily:"'DM Mono',monospace",cursor:"pointer",padding:0}}>→ TODAY</button></>}
-                  {total>=goal&&<><div style={{width:1,height:10,background:"#2a2a3a"}}/><div style={{fontSize:11,color:"#22c55e",letterSpacing:"0.08em"}}>✓ DONE</div></>}
-                </div>
-              </div>
-              <div style={{position:"relative",width:90,height:90,flexShrink:0}}>
-                <svg width="90" height="90" viewBox="0 0 90 90">
-                  <circle cx="45" cy="45" r="38" fill="none" stroke="#1e1e2e" strokeWidth="7"/>
-                  <circle cx="45" cy="45" r="38" fill="none" stroke={ring} strokeWidth="7" strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" transform="rotate(-90 45 45)" style={{transition:"stroke-dasharray 0.4s ease,stroke 0.4s",filter:`drop-shadow(0 0 6px ${ring}88)`}}/>
-                </svg>
-                <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:800,color:"#fff"}}>{pct}%</div>
-                </div>
-              </div>
-            </div>
-            <div style={{display:"flex",borderTop:"1px solid #1c1c2e"}}>
-              {["today","history","logs"].map(t=><button key={t} className="tab-btn" onClick={()=>{setView(t);setDrillCat(null);}} style={{color:view===t?"#fff":"#444",borderBottom:view===t?`2px solid ${ring}`:"2px solid transparent"}}>{t.toUpperCase()}</button>)}
-            </div>
-          </div>
-
-          {/* MIDDAY BANNER */}
-          {showMiddayBanner&&(
-            <div className="midday-banner" style={{background:"linear-gradient(135deg,#1a1a0d,#1e1e13)",border:"1px solid #2a2a1a"}}>
-              <span style={{fontSize:20}}>☀️</span>
-              <div style={{flex:1}}>
-                <div style={{fontSize:11,color:"#f59e0b",fontWeight:500,letterSpacing:"0.1em",marginBottom:2}}>MIDDAY CHECK-IN</div>
-                <div style={{fontSize:12,color:"#888",lineHeight:1.5}}>
-                  {total>=goal ? "Goal hit! Keep it up." : `${goal-total} pts to go. ${blockCatsLeft.length} midday items left (+${blockPtsLeft} pts available).`}
-                </div>
-              </div>
-              <button onClick={()=>setShowMidday(false)} style={{background:"none",border:"none",color:"#333",fontSize:18,cursor:"pointer",padding:"0 4px"}}>×</button>
-            </div>
-          )}
-
-          {/* WEEKEND COMMIT LIST */}
-          {view==="today"&&isToday&&isWeekend(today)&&(
-            <WeekendCommitList CATEGORIES={CATEGORIES} cur={cur} onToggle={toggle} onSetMulti={setMulti} commitKeys={commitKeys} setCommitKeys={setCommitKeys}/>
-          )}
-
-          {/* TODAY */}
-          {view==="today"&&<>
-            <div style={{padding:"16px 20px 0"}}>
-              <div className="section-label">OUTFIT</div>
-              <OutfitPicker value={clothes[selectedDate]||""} onChange={setCloth} allClothes={clothes}/>
-            </div>
-
-            <div style={{padding:"16px 12px 0"}}>
-              <div style={{display:"flex",alignItems:"center",padding:"0 8px",marginBottom:4}}>
-                <div className="section-label" style={{padding:0,marginBottom:0,flex:1}}>ACTIVITIES</div>
-                <button className={`edit-mode-btn ${editMode?"active":""}`} onClick={()=>setEditMode(v=>!v)}>{editMode?"DONE":"REORDER"}</button>
-              </div>
-              {BLOCKS.map((block,bi)=>(
-                <BlockSection key={block.id} block={block} cats={regular} cur={cur} editMode={editMode}
-                  onToggle={toggle} onSetMulti={setMulti} onMove={moveItem} totalCats={regular.length} blockIdx={bi}/>
-              ))}
-            </div>
-
-            <div style={{padding:"8px 12px 0"}}>
-              <div className="section-label">PENALTIES</div>
-              {penalties.map((cat,idx)=>{
-                const checked=!!cur[cat.key];
-                return <div key={cat.key} style={{display:"flex",alignItems:"center",gap:4}}>
-                  {editMode&&<div className="reorder-col"><button className="reorder-btn" onClick={()=>moveItem(cat.key,-1)} style={{opacity:idx===0?0.15:1}}>▲</button><button className="reorder-btn" onClick={()=>moveItem(cat.key,1)} style={{opacity:idx===penalties.length-1?0.15:1}}>▼</button></div>}
-                  <div className={`cat-row penalty-row ${checked?"checked":""}`} style={{flex:1}} onClick={()=>!editMode&&toggle(cat.key)}>
-                    <div className="check-box" onClick={e=>{e.stopPropagation();toggle(cat.key);}}>
-                      {checked&&<svg width="13" height="10" viewBox="0 0 13 10"><polyline points="1,5 5,9 12,1" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                    </div>
-                    <span style={{fontSize:16}}>{cat.emoji}</span>
-                    <span style={{flex:1,fontSize:13,color:checked?"#fca5a5":"#c0c0d0"}}>{cat.label}</span>
-                    <span style={{fontSize:12,color:checked?"#ef4444":"#444",fontWeight:500}}>{cat.points}</span>
-                  </div>
-                </div>;
-              })}
-            </div>
-
-            <div style={{padding:"16px 20px 32px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                <span style={{fontSize:16}}>🤝</span>
-                <div className="section-label" style={{marginBottom:0}}>WHAT SOCIAL EFFORT DID YOU MAKE TODAY?</div>
-              </div>
-              <textarea rows={3} placeholder="Who did you connect with, reach out to, or spend time with..." value={socialNotes[selectedDate]||""} onChange={e=>setSocial(e.target.value)}/>
-            </div>
-          </>}
-
-          {/* HISTORY */}
-          {view==="history"&&<>
-            <div style={{display:"flex",gap:6,padding:"12px 16px 0"}}>
-              {[["overview","OVERVIEW"],["categories","CATEGORIES"],["log","LOG"]].map(([id,label])=>(
-                <button key={id} className="hist-sub-btn" onClick={()=>setHistTab(id)} style={{background:histTab===id?"#1e1e2e":"transparent",color:histTab===id?"#e2e8f0":"#444",border:`1px solid ${histTab===id?"#2a2a3a":"transparent"}`}}>{label}</button>
-              ))}
-            </div>
-
-            {histTab==="overview"&&<div style={{padding:"12px 16px 32px"}}>
-              {sortedDates.length===0?<div style={{textAlign:"center",color:"#444",fontSize:13,padding:"40px 0"}}>No entries yet.</div>:<>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
-                  {[{label:"AVG SCORE",val:runningAvg,color:"#3b82f6"},{label:"GOAL RATE",val:`${goalHitRate}%`,color:"#22c55e"},{label:"BEST DAY",val:best,color:"#f59e0b"}].map(s=>(
-                    <div key={s.label} className="stat-card"><div style={{fontFamily:"'Syne',sans-serif",fontSize:24,fontWeight:800,color:s.color,lineHeight:1}}>{s.val}</div><div style={{fontSize:9,color:"#444",letterSpacing:"0.1em",marginTop:4}}>{s.label}</div></div>
-                  ))}
-                </div>
-                <div className="stat-card" style={{marginBottom:12}}>
-                  <div className="section-label" style={{marginBottom:12}}>LAST {last30.length} DAYS</div>
-                  <BarChart data={last30} height={120}/>
-                  <div style={{display:"flex",gap:16,marginTop:10}}>
-                    <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"#22c55e"}}/><span style={{fontSize:10,color:"#555"}}>Goal hit</span></div>
-                    <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"#f59e0b"}}/><span style={{fontSize:10,color:"#555"}}>80%+</span></div>
-                    <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"#3b82f6",opacity:0.5}}/><span style={{fontSize:10,color:"#555"}}>Avg</span></div>
-                  </div>
-                </div>
-                {allTotals.length>=7&&<div className="stat-card" style={{marginBottom:12}}>
-                  <div className="section-label" style={{marginBottom:12}}>7-DAY ROLLING AVERAGE</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                    {allTotals.slice(-14).map((d,i,arr)=>{ const w=arr.slice(Math.max(0,i-6),i+1); const avg7=Math.round(w.reduce((s,x)=>s+x.val,0)/w.length); return <div key={d.date} style={{flex:"1 0 auto",minWidth:60,background:"#0f0f13",borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:9,color:"#444",letterSpacing:"0.08em",marginBottom:2}}>{formatShort(d.date)}</div><div style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:800,color:avg7>=(isWeekend(d.date)?WEEKEND_GOAL:WEEKDAY_GOAL)?"#22c55e":"#e2e8f0"}}>{avg7}</div></div>; })}
-                  </div>
-                </div>}
-              </>}
-            </div>}
-
-            {histTab==="categories"&&<div style={{padding:"12px 16px 32px"}}>
-              <div className="section-label" style={{marginBottom:12}}>TAP ANY CATEGORY TO DRILL DOWN</div>
-              {catStats.map(({cat,done,total:tot,pct:p})=>(
-                <div key={cat.key} className="cat-drill-row" onClick={()=>setDrillCat(cat)}>
-                  <span style={{fontSize:16,flexShrink:0}}>{cat.emoji}</span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-                      <span style={{fontSize:12,color:"#c0c0d0"}}>{cat.label}</span>
-                      <span style={{fontSize:11,color:p>=80?"#22c55e":p>=50?"#f59e0b":"#555",fontWeight:500,marginLeft:8}}>{p}%</span>
-                    </div>
-                    <div style={{height:3,background:"#1e1e2e",borderRadius:2,overflow:"hidden"}}>
-                      <div style={{height:"100%",borderRadius:2,width:`${p}%`,background:p>=80?"#22c55e":p>=50?"#f59e0b":"#3b3b50"}}/>
-                    </div>
-                  </div>
-                  <span style={{fontSize:10,color:"#333",flexShrink:0,marginLeft:8}}>{done}/{tot}</span>
-                  <span style={{fontSize:12,color:"#333",flexShrink:0}}>›</span>
-                </div>
-              ))}
-            </div>}
-
-            {histTab==="log"&&<div style={{padding:"12px 16px 32px"}}>
-              {[...sortedDates].reverse().length===0?<div style={{textAlign:"center",color:"#444",fontSize:13,padding:"40px 0"}}>No entries yet.</div>
-                :[...sortedDates].reverse().map(date=>{
-                  const de=entries[date]||{}; const pts=getDayTotal(CATEGORIES,de); const g=isWeekend(date)?WEEKEND_GOAL:WEEKDAY_GOAL; const hit=pts>=g; const p=Math.min(Math.round((pts/g)*100),100); const note=socialNotes[date];
-                  return <div key={date} className="hist-row" onClick={()=>{setSelectedDate(date);setView("today");}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,color:"#e2e8f0",fontWeight:500}}>{formatDate(date)}</div>
-                      {clothes[date]&&<div style={{fontSize:10,color:"#555",marginTop:2}}>{clothes[date]}</div>}
-                      {note&&<div style={{fontSize:10,color:"#3b5a3b",marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>🤝 {note}</div>}
-                    </div>
-                    <div style={{textAlign:"right",flexShrink:0}}>
-                      <div style={{fontSize:18,fontFamily:"'Syne',sans-serif",fontWeight:800,color:hit?"#22c55e":"#e2e8f0"}}>{pts}</div>
-                      <div style={{fontSize:10,color:"#555"}}>{p}% of {g}</div>
-                    </div>
-                    <div style={{width:4,height:40,borderRadius:2,background:hit?"#22c55e":pts>=g*0.8?"#f59e0b":"#3b3b50",flexShrink:0}}/>
-                  </div>;
-                })
-              }
-            </div>}
-
-            <div style={{marginTop:8,paddingTop:16,borderTop:"1px solid #1a1a22"}}>
-              <AICoach entries={entries} CATEGORIES={CATEGORIES} allTotals={allTotals} catStats={catStats} sortedDates={sortedDates}/>
-            </div>
-          </>}
-          {/* LOGS */}
-          {view==="logs"&&<>
-            {/* Sub tabs */}
-            <div style={{display:"flex",gap:6,padding:"12px 16px 0"}}>
-              {[["outfit","👔 OUTFITS"],["social","🤝 SOCIAL"],["brokers","📊 BROKERS"]].map(([id,label])=>(
-                <button key={id} className="hist-sub-btn" onClick={()=>setLogsTab(id)}
-                  style={{background:logsTab===id?"#1e1e2e":"transparent",color:logsTab===id?"#e2e8f0":"#444",border:`1px solid ${logsTab===id?"#2a2a3a":"transparent"}`}}>
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* OUTFIT LOG */}
-            {logsTab==="outfit"&&<div style={{padding:"12px 16px 32px"}}>
-              {(() => {
-                // Build frequency map
-                const freq = {};
-                Object.entries(clothes).forEach(([date, outfit]) => {
-                  if (!outfit || !outfit.trim()) return;
-                  const key = outfit.trim().toLowerCase();
-                  if (!freq[key]) freq[key] = { label: outfit.trim(), dates: [] };
-                  freq[key].dates.push(date);
-                });
-                const sorted = Object.values(freq).sort((a,b) => b.dates.length - a.dates.length);
-                if (sorted.length === 0) return <div style={{textAlign:"center",color:"#444",fontSize:13,padding:"40px 0"}}>No outfits logged yet.</div>;
-                return <>
-                  <div className="section-label" style={{marginBottom:12}}>{sorted.length} UNIQUE OUTFITS LOGGED</div>
-                  {sorted.map((item, i) => {
-                    const count = item.dates.length;
-                    const color = count >= 3 ? "#ef4444" : count === 2 ? "#f59e0b" : "#22c55e";
-                    const lastWorn = item.dates.sort().reverse()[0];
-                    return (
-                      <div key={i} style={{padding:"12px 14px",borderRadius:10,background:"#13131c",border:"1px solid #1e1e2e",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:13,color:"#e2e8f0",marginBottom:3}}>{item.label}</div>
-                          <div style={{fontSize:10,color:"#555"}}>Last worn: {formatDate(lastWorn)}</div>
-                        </div>
-                        <div style={{textAlign:"right",flexShrink:0}}>
-                          <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,color,lineHeight:1}}>×{count}</div>
-                          {count >= 2 && <div style={{fontSize:9,color,letterSpacing:"0.1em",marginTop:2}}>{count>=3?"REWORN":"2X WEAR"}</div>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>;
-              })()}
-            </div>}
-
-            {/* SOCIAL LOG */}
-            {logsTab==="social"&&<div style={{padding:"12px 16px 32px"}}>
-              {(() => {
-                const entries_with_notes = Object.entries(socialNotes)
-                  .filter(([,note]) => note && note.trim())
-                  .sort((a,b) => b[0].localeCompare(a[0]));
-                if (entries_with_notes.length === 0) return <div style={{textAlign:"center",color:"#444",fontSize:13,padding:"40px 0"}}>No social entries yet.</div>;
-                return <>
-                  <div className="section-label" style={{marginBottom:12}}>{entries_with_notes.length} ENTRIES</div>
-                  {entries_with_notes.map(([date, note]) => (
-                    <div key={date} style={{padding:"14px 16px",borderRadius:12,background:"#13131c",border:"1px solid #1e1e2e",marginBottom:10}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                        <div style={{width:6,height:6,borderRadius:"50%",background:"#22c55e",flexShrink:0}}/>
-                        <div style={{fontSize:10,color:"#555",letterSpacing:"0.1em"}}>{formatDate(date)}</div>
-                      </div>
-                      <div style={{fontSize:13,color:"#c0c0d0",lineHeight:1.6}}>{note}</div>
-                    </div>
-                  ))}
-                </>;
-              })()}
-            </div>}
-            {/* BROKER LOG */}
-            {logsTab==="brokers"&&<div style={{padding:"12px 16px 32px"}}>
-              {(() => {
-                const today = getTodayStr();
-                const daysSince = (dateStr) => {
-                  if (!dateStr) return 9999;
-                  const diff = new Date(today) - new Date(dateStr);
-                  return Math.floor(diff / (1000*60*60*24));
-                };
-                const statusColor = (days) => days >= 90 ? "#ef4444" : days >= 60 ? "#f59e0b" : days === 9999 ? "#555" : "#22c55e";
-                const statusLabel = (days) => days === 9999 ? "NEVER" : days === 0 ? "TODAY" : days === 1 ? "1 DAY AGO" : `${days}d AGO`;
-                const sorted = Object.values(brokers).sort((a,b) => daysSince(a.lastDate) - daysSince(b.lastDate) > 0 ? -1 : 1).sort((a,b) => daysSince(b.lastDate) - daysSince(a.lastDate));
-
-                return <>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                    <div className="section-label" style={{marginBottom:0}}>{sorted.length} BROKERS</div>
-                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                      <input type="text" placeholder="Add broker..." value={newBrokerName} onChange={e=>setNewBrokerName(e.target.value)}
-                        onKeyDown={e=>e.key==="Enter"&&addBroker()}
-                        style={{padding:"5px 10px",fontSize:12,width:130,borderRadius:6}}/>
-                      <button onClick={addBroker} style={{background:"#3b82f6",border:"none",color:"#fff",padding:"5px 10px",borderRadius:6,cursor:"pointer",fontSize:12,fontFamily:"'DM Mono',monospace"}}>+ADD</button>
-                    </div>
-                  </div>
-
-                  {/* UPCOMING section */}
-                  {(() => {
-                    const upcoming = Object.values(brokers)
-                      .filter(b => b.nextDate && b.nextDate >= today)
-                      .sort((a,b) => a.nextDate.localeCompare(b.nextDate));
-                    if (!upcoming.length) return null;
-                    return <>
-                      <div className="section-label" style={{marginBottom:8,marginTop:4}}>📅 UPCOMING</div>
-                      {upcoming.map(broker => {
-                        const isOpen = brokerExpanded === broker.name;
-                        const daysUntil = Math.ceil((new Date(broker.nextDate) - new Date(today)) / (1000*60*60*24));
-                        const upColor = daysUntil <= 3 ? "#22c55e" : daysUntil <= 7 ? "#3b82f6" : "#888";
-                        const upLabel = daysUntil === 0 ? "TODAY" : daysUntil === 1 ? "TOMORROW" : `IN ${daysUntil}d`;
-                        return (
-                          <div key={broker.name} style={{borderRadius:12,background:"#0d1a13",border:`1px solid ${isOpen?"#1e3a2a":"#1a2a1e"}`,marginBottom:8,overflow:"hidden"}}>
-                            <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",cursor:"pointer"}} onClick={()=>setBrokerExpanded(isOpen?null:broker.name)}>
-                              <div style={{width:8,height:8,borderRadius:"50%",background:upColor,flexShrink:0,boxShadow:`0 0 6px ${upColor}88`}}/>
-                              <div style={{flex:1}}>
-                                <div style={{fontSize:14,color:"#e2e8f0",fontWeight:500}}>{broker.name}</div>
-                                <div style={{fontSize:10,color:"#3b5a3b",marginTop:2}}>{formatDate(broker.nextDate)}</div>
-                              </div>
-                              <div style={{textAlign:"right",flexShrink:0}}>
-                                <div style={{fontSize:11,color:upColor,fontWeight:600,letterSpacing:"0.08em"}}>{upLabel}</div>
-                              </div>
-                              <div style={{fontSize:11,color:"#333"}}>{isOpen?"▲":"▼"}</div>
-                            </div>
-                            {isOpen&&<BrokerEditPanel broker={broker} updateBroker={updateBroker} deleteBroker={deleteBroker}/>}
-                          </div>
-                        );
-                      })}
-                      <div style={{height:1,background:"#1a1a22",margin:"8px 0 16px"}}/>
-                    </>;
-                  })()}
-
-                  {/* ALL BROKERS section */}
-                  <div className="section-label" style={{marginBottom:8}}>ALL BROKERS</div>
-                  {sorted.map(broker => {
-                    const days = daysSince(broker.lastDate);
-                    const color = statusColor(days);
-                    const isOpen = brokerExpanded === broker.name;
-                    return (
-                      <div key={broker.name} style={{borderRadius:12,background:"#13131c",border:`1px solid ${isOpen?"#2a2a3a":"#1e1e2e"}`,marginBottom:8,overflow:"hidden"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",cursor:"pointer"}} onClick={()=>setBrokerExpanded(isOpen?null:broker.name)}>
-                          <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0,boxShadow:`0 0 6px ${color}88`}}/>
-                          <div style={{flex:1}}>
-                            <div style={{fontSize:14,color:"#e2e8f0",fontWeight:500}}>{broker.name}</div>
-                            {broker.notes&&<div style={{fontSize:10,color:"#555",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{broker.notes}</div>}
-                          </div>
-                          <div style={{textAlign:"right",flexShrink:0}}>
-                            <div style={{fontSize:11,color,fontWeight:500,letterSpacing:"0.06em"}}>{statusLabel(days)}</div>
-                            {broker.lastDate&&<div style={{fontSize:9,color:"#444",marginTop:1}}>{formatDate(broker.lastDate)}</div>}
-                            {broker.nextDate&&broker.nextDate>=today&&<div style={{fontSize:9,color:"#3b82f6",marginTop:1}}>📅 {formatDate(broker.nextDate)}</div>}
-                          </div>
-                          <div style={{fontSize:11,color:"#333"}}>{isOpen?"▲":"▼"}</div>
-                        </div>
-                        {isOpen&&<BrokerEditPanel broker={broker} updateBroker={updateBroker} deleteBroker={deleteBroker}/>}
-                      </div>
-                    );
-                  })}
-                </>;
-              })()}
-            </div>}
-          </>}
-        </div>
-      );
+      setLoading(false);
     }
+    loadData();
+  }, []);
 
-    ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
-  </script>
-</body>
-</html>
+  const persist = async (h, d, s) => {
+    // We persist individual entries — this is called after each save
+    // Individual saves handled in each tab's save function
+  };
+
+  const saveWorkoutEntry = async (entry) => {
+    await sbFetch("workouts", "POST", { user_id: userId, data: entry });
+  };
+
+  const saveDailyEntry = async (entry) => {
+    await sbFetch("daily_logs", "POST", { user_id: userId, data: entry });
+  };
+
+  const saveSleepEntry = async (entry) => {
+    await sbFetch("sleep_logs", "POST", { user_id: userId, data: entry });
+  };
+
+  const deleteWorkoutEntry = async (id) => {
+    const newH = history.filter(h => h.id !== id);
+    setHistory(newH);
+    // Delete by matching the id inside the data jsonb
+    await sbFetch("workouts", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
+  };
+
+  const deleteDailyEntry = async (id) => {
+    const newD = dailyLog.filter(d => d.id !== id);
+    setDailyLog(newD);
+    await sbFetch("daily_logs", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
+  };
+
+  const deleteSleepEntry = async (id) => {
+    const newS = sleepLog.filter(s => s.id !== id);
+    setSleepLog(newS);
+    await sbFetch("sleep_logs", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
+  };
+
+  const todayDateStr = new Date().toLocaleDateString();
+  const todayDaily = dailyLog.find(d => {
+    // Match against today in any locale format
+    const entryDate = new Date(d.date);
+    const today = new Date();
+    return entryDate.toDateString() === today.toDateString();
+  });
+  const needsDailyLog = !todayDaily || !(todayDaily.crunches || todayDaily.planks || todayDaily.pushups);
+  const needsStretches = !todayDaily || !todayDaily.stretches?.length;
+  const needsReminder = needsDailyLog || needsStretches;
+
+  const TABS = [
+    { key: "workout", label: "WORKOUT", flex: 2 },
+    { key: "daily",   label: "DAILY",   flex: 1 },
+    { key: "sleep",   label: "SLEEP",   flex: 1 },
+    { key: "history", label: "HISTORY", flex: 1 },
+  ];
+
+  return (
+    <>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+      <div style={{ minHeight: "100vh", background: "#0a0a0a", color: "#e8e0d5", fontFamily: "'DM Mono', monospace", paddingBottom: 72 }}>
+
+        {/* Header */}
+        <div style={{ background: "#0a0a0a", borderBottom: "1px solid #141414", padding: "16px 20px 0", position: "sticky", top: 0, zIndex: 20 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
+            <span style={{ fontSize: 15, letterSpacing: 6, color: "#ff4d00", fontWeight: 700 }}>REP</span>
+            <span style={{ fontSize: 9, letterSpacing: 2, color: "#777" }}>
+              {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }).toUpperCase()}
+            </span>
+          </div>
+
+          {/* Tab pills */}
+          <div style={{ display: "flex", gap: 0, marginBottom: -1 }}>
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)} style={{
+                flex: t.flex || 1,
+                background: "none", border: "none",
+                borderBottom: `2px solid ${tab === t.key ? "#ff4d00" : "transparent"}`,
+                color: tab === t.key ? "#e8e0d5" : "#333",
+                padding: "10px 0 12px",
+                fontFamily: "'DM Mono', monospace",
+                fontSize: t.key === "workout" ? 11 : 8,
+                letterSpacing: 3,
+                textTransform: "uppercase",
+                cursor: "pointer",
+                transition: "all 0.2s",
+                fontWeight: tab === t.key ? 700 : 400,
+                position: "relative",
+              }}>
+                {t.label}
+                {t.key === "daily" && needsReminder && (
+                  <span style={{ position: "absolute", top: 8, right: "calc(50% - 14px)", width: 5, height: 5, borderRadius: "50%", background: "#ff4d00", display: "inline-block" }} />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content */}
+        {loading ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", flexDirection: "column", gap: 16 }}>
+            <div style={{ fontSize: 11, letterSpacing: 4, color: "#ff4d00", textTransform: "uppercase" }}>Loading…</div>
+            <div style={{ fontSize: 10, color: "#444", letterSpacing: 2 }}>Syncing your data</div>
+          </div>
+        ) : (
+          <>
+            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} onGoToDaily={() => setTab("daily")} />}
+            {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} history={history} sleepLog={sleepLog} />}
+            {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} history={history} dailyLog={dailyLog} />}
+            {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
