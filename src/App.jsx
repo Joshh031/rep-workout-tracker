@@ -711,31 +711,34 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
           </div>
         ) : (
           <div style={{ ...g.card, overflow: "hidden", marginBottom: 16 }}>
-            <div style={{ background: "#0f0f0f", padding: "10px 14px", borderBottom: "1px solid #1a1a1a" }}>
-              <div style={{ fontSize: 8, letterSpacing: 3, color: "#555", textTransform: "uppercase" }}>Last Session · {lastSession.date}</div>
+            <div style={{ background: "#0f0f0f", padding: "10px 14px", borderBottom: "1px solid #252525" }}>
+              <div style={{ fontSize: 8, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase" }}>Last Session · {lastSession.date}</div>
             </div>
             <div style={{ padding: "12px 14px" }}>
               {lastExercises.map((ex, i) => {
                 const filled = ex.sets.filter(s => s.reps || s.weight);
                 if (!filled.length) return null;
                 const vol = filled.reduce((a, s) => a + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0);
-                const topSet = filled.reduce((a, b) => (parseFloat(b.weight)||0) > (parseFloat(a.weight)||0) ? b : a);
                 return (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 8, marginBottom: 8, borderBottom: i < lastExercises.length - 1 ? "1px solid #141414" : "none" }}>
-                    <div>
-                      <div style={{ fontSize: 10, color: "#ccc", fontWeight: 600 }}>{ex.name}</div>
-                      <div style={{ fontSize: 9, color: "#555", marginTop: 2 }}>{filled.length} sets · top {topSet.reps}×{topSet.weight}lbs</div>
+                  <div key={i} style={{ paddingBottom: 10, marginBottom: 10, borderBottom: i < lastExercises.length - 1 ? "1px solid #1e1e1e" : "none" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <div style={{ fontSize: 11, color: "#e8e0d5", fontWeight: 700 }}>{ex.name}</div>
+                      <div style={{ fontSize: 9, color: "#ff4d00", fontFamily: "'DM Mono', monospace" }}>{Math.round(vol).toLocaleString()} lbs</div>
                     </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: 9, color: "#444" }}>{Math.round(vol).toLocaleString()} lbs</div>
-                      <div style={{ fontSize: 7, color: "#333" }}>volume</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(70px, 1fr))", gap: 4 }}>
+                      {filled.map((s, j) => (
+                        <div key={j} style={{ background: "#0f0f0f", border: "1px solid #252525", borderRadius: 4, padding: "5px 6px", textAlign: "center" }}>
+                          <div style={{ fontSize: 11, color: "#e8e0d5", fontWeight: 600, fontFamily: "'DM Mono', monospace" }}>{s.reps || "—"}</div>
+                          <div style={{ fontSize: 9, color: "#888" }}>{s.weight ? `${s.weight}lb` : "bw"}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );
               })}
-              <div style={{ borderTop: "1px solid #1e1e1e", paddingTop: 8, marginTop: 4, display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 9, color: "#555" }}>Total Volume</span>
-                <span style={{ fontSize: 10, color: "#888", fontWeight: 700 }}>
+              <div style={{ borderTop: "1px solid #252525", paddingTop: 8, marginTop: 4, display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 9, color: "#777" }}>Total Volume</span>
+                <span style={{ fontSize: 11, color: "#e8e0d5", fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>
                   {Math.round(lastExercises.reduce((a, ex) => a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) => b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0)).toLocaleString()} lbs
                 </span>
               </div>
@@ -1947,17 +1950,89 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
   return (
     <div style={g.page}>
       {/* View toggle */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        {["log", "progress", "heatmap", "scorecard"].map(v => (
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        {["log", "prs", "progress", "heatmap", "scorecard"].map(v => (
           <button key={v} onClick={() => setView(v)} style={{
-            flex: 1, padding: "9px 0", borderRadius: 8, cursor: "pointer",
-            fontFamily: "'DM Mono', monospace", fontSize: 8, letterSpacing: 1, textTransform: "uppercase",
+            flex: 1, padding: "8px 0", borderRadius: 8, cursor: "pointer", minWidth: 48,
+            fontFamily: "'DM Mono', monospace", fontSize: 7, letterSpacing: 1, textTransform: "uppercase",
             border: `1px solid ${view === v ? "#ff4d00" : "#2a2a2a"}`,
             background: view === v ? "#ff4d00" : "#141414",
             color: view === v ? "#fff" : "#777", fontWeight: view === v ? 700 : 400
-          }}>{v === "progress" ? "AI ✦" : v === "heatmap" ? "MAP ◈" : v === "scorecard" ? "WEEK ⚡" : "LOG"}</button>
+          }}>{v === "progress" ? "AI ✦" : v === "heatmap" ? "MAP ◈" : v === "scorecard" ? "WEEK ⚡" : v === "prs" ? "PR 🏆" : "LOG"}</button>
         ))}
       </div>
+
+      {/* PR VIEW */}
+      {view === "prs" && (() => {
+        // Build all-time max for every exercise across all sessions
+        const prMap = {};
+        history.forEach(session => {
+          (session.exercises || []).forEach(ex => {
+            if (!ex.name) return;
+            const name = ex.name.trim();
+            ex.sets.forEach(s => {
+              const w = parseFloat(s.weight) || 0;
+              const r = parseFloat(s.reps) || 0;
+              if (!w && !r) return;
+              if (!prMap[name]) prMap[name] = { maxWeight: 0, maxReps: 0, maxVol: 0, date: "", type: session.type };
+              const vol = w * r;
+              if (w > prMap[name].maxWeight) { prMap[name].maxWeight = w; prMap[name].date = session.date; }
+              if (r > prMap[name].maxReps) prMap[name].maxReps = r;
+              if (vol > prMap[name].maxVol) prMap[name].maxVol = vol;
+            });
+          });
+        });
+
+        // Group by workout type
+        const byType = {};
+        Object.entries(prMap).forEach(([name, data]) => {
+          const type = data.type || "other";
+          if (!byType[type]) byType[type] = [];
+          byType[type].push({ name, ...data });
+        });
+
+        // Sort each group by max weight desc
+        Object.values(byType).forEach(arr => arr.sort((a, b) => b.maxWeight - a.maxWeight));
+
+        const types = Object.keys(byType).sort();
+
+        if (types.length === 0) return (
+          <div style={{ ...g.card, padding: "20px", textAlign: "center" }}>
+            <div style={{ fontSize: 11, color: "#555" }}>No workout data yet. Log some sessions to see your PRs.</div>
+          </div>
+        );
+
+        return (
+          <div>
+            <div style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 12 }}>All-Time Personal Records</div>
+            {types.map(type => (
+              <div key={type} style={{ ...g.card, overflow: "hidden", marginBottom: 12 }}>
+                <div style={{ background: "#0f0f0f", padding: "10px 14px", borderBottom: "1px solid #1a1a1a", display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 14 }}>{ICON[type] || "💪"}</span>
+                  <span style={{ fontSize: 9, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>{type}</span>
+                </div>
+                <div style={{ padding: "8px 14px" }}>
+                  {/* Header */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 50px 50px", gap: 8, marginBottom: 6, paddingBottom: 6, borderBottom: "1px solid #141414" }}>
+                    <span style={{ fontSize: 7, color: "#444", letterSpacing: 1, textTransform: "uppercase" }}>Exercise</span>
+                    <span style={{ fontSize: 7, color: "#444", letterSpacing: 1, textTransform: "uppercase", textAlign: "right" }}>Max Wt</span>
+                    <span style={{ fontSize: 7, color: "#444", letterSpacing: 1, textTransform: "uppercase", textAlign: "right" }}>Max Reps</span>
+                    <span style={{ fontSize: 7, color: "#444", letterSpacing: 1, textTransform: "uppercase", textAlign: "right" }}>Date</span>
+                  </div>
+                  {byType[type].map((pr, i) => (
+                    <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 60px 50px 50px", gap: 8, paddingBottom: 7, marginBottom: 7, borderBottom: i < byType[type].length - 1 ? "1px solid #0f0f0f" : "none", alignItems: "center" }}>
+                      <span style={{ fontSize: 10, color: "#ccc" }}>{pr.name}</span>
+                      <span style={{ fontSize: 11, color: "#ff4d00", fontWeight: 700, textAlign: "right", fontFamily: "'DM Mono', monospace" }}>{pr.maxWeight > 0 ? `${pr.maxWeight}` : "—"}</span>
+                      <span style={{ fontSize: 10, color: "#888", textAlign: "right" }}>{pr.maxReps > 0 ? pr.maxReps : "—"}</span>
+                      <span style={{ fontSize: 8, color: "#444", textAlign: "right" }}>{pr.date ? pr.date.replace(/\/\d{4}/, "") : "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* PROGRESS VIEW */}
       {view === "progress" && (
