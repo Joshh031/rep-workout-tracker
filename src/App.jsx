@@ -470,6 +470,10 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   const launchWorkout = () => setMode("log");
 
   const [workoutDate, setWorkoutDate] = useState(() => new Date().toLocaleDateString("en-CA"));
+  const [runTextInput, setRunTextInput] = useState("");
+  const [runTextMode, setRunTextMode] = useState(false);
+  const [runParsing, setRunParsing] = useState(false);
+  const [runParseStatus, setRunParseStatus] = useState("");
 
   const addSet = (i) => setExercises(prev => prev.map((ex, idx) => idx === i ? { ...ex, sets: [...ex.sets, { reps: "", weight: "" }] } : ex));
   const updateSet = (i, j, f, v) => setExercises(prev => prev.map((ex, idx) => idx !== i ? ex : { ...ex, sets: ex.sets.map((s, si) => si !== j ? s : { ...s, [f]: v }) }));
@@ -964,10 +968,6 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
 
   // ── Run log ──
   const dist = parseFloat(runData.distance) || 0;
-  const [runTextInput, setRunTextInput] = useState("");
-  const [runTextMode, setRunTextMode] = useState(false);
-  const [runParsing, setRunParsing] = useState(false);
-  const [runParseStatus, setRunParseStatus] = useState(""); // "" | "done" | "error"
 
   const parseRunText = async () => {
     if (!runTextInput.trim()) return;
