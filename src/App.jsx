@@ -470,6 +470,10 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   const launchWorkout = () => setMode("log");
 
   const [workoutDate, setWorkoutDate] = useState(() => new Date().toLocaleDateString("en-CA"));
+  const [runTextInput, setRunTextInput] = useState("");
+  const [runTextMode, setRunTextMode] = useState(false);
+  const [runParsing, setRunParsing] = useState(false);
+  const [runParseStatus, setRunParseStatus] = useState("");
 
   const addSet = (i) => setExercises(prev => prev.map((ex, idx) => idx === i ? { ...ex, sets: [...ex.sets, { reps: "", weight: "" }] } : ex));
   const updateSet = (i, j, f, v) => setExercises(prev => prev.map((ex, idx) => idx !== i ? ex : { ...ex, sets: ex.sets.map((s, si) => si !== j ? s : { ...s, [f]: v }) }));
@@ -965,6 +969,59 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   // ── Run log ──
   const dist = parseFloat(runData.distance) || 0;
 
+  const parseRunText = async () => {
+    if (!runTextInput.trim()) return;
+    setRunParsing(true);
+    setRunParseStatus("");
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 500,
+          messages: [{ role: "user", content: `Parse this run log and return ONLY valid JSON with these fields:
+{
+  "distance": number (total/final distance in miles),
+  "duration": string (total/final time in mm:ss format),
+  "firstStop": number (distance at first stop in miles),
+  "maxSpeed": number (highest max speed mentioned),
+  "pace": string (calculated avg pace in m:ss format if possible),
+  "notes": string (brief summary of stops)
+}
+
+The user may list multiple stops. Use the LAST/FINAL stop for distance and duration.
+For firstStop use the first stop distance.
+For maxSpeed use the highest value mentioned across all stops.
+Calculate pace from final distance and duration if possible.
+
+Run log:
+${runTextInput}
+
+Return only JSON, no explanation.` }]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content?.[0]?.text || "{}";
+      const clean = raw.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      setRunData(prev => ({
+        ...prev,
+        distance: parsed.distance ? String(parsed.distance) : prev.distance,
+        duration: parsed.duration || prev.duration,
+        firstStop: parsed.firstStop ? String(parsed.firstStop) : prev.firstStop,
+        maxSpeed: parsed.maxSpeed ? String(parsed.maxSpeed) : prev.maxSpeed,
+        pace: parsed.pace || prev.pace,
+        notes: parsed.notes || prev.notes,
+      }));
+      setRunParseStatus("done");
+      setRunTextMode(false);
+    } catch(e) {
+      setRunParseStatus("error");
+    }
+    setRunParsing(false);
+  };
+
   // Auto-calculate pace from distance + duration
   const calcPace = (distance, duration) => {
     if (!distance || !duration) return "";
@@ -995,6 +1052,39 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         <span style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#888" }}>RUN</span>
         <input type="date" value={workoutDate} onChange={e => setWorkoutDate(e.target.value)}
           style={{ marginLeft: "auto", background: workoutDate !== new Date().toLocaleDateString("en-CA") ? "#1a0d00" : "#141414", border: `1px solid ${workoutDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#252525"}`, color: workoutDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#666", borderRadius: 5, padding: "4px 6px", fontSize: 10, fontFamily: "'DM Mono', monospace", cursor: "pointer" }} />
+      </div>
+
+      {/* Run bulk text loader */}
+      <div style={{ ...g.card, padding: "12px 14px", marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: runTextMode ? 10 : 0 }}>
+          <span style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase" }}>✏ Bulk Entry</span>
+          <button onClick={() => { setRunTextMode(m => !m); setRunParseStatus(""); }}
+            style={{ ...g.ghost, fontSize: 8, padding: "3px 8px", color: runTextMode ? "#ff4d00" : "#555", borderColor: runTextMode ? "#ff4d00" : "#252525" }}>
+            {runTextMode ? "CANCEL" : "TYPE RUN"}
+          </button>
+        </div>
+        {runTextMode && (
+          <div>
+            <textarea
+              placeholder={"e.g.\nFirst stop: 3.5 miles; 32 min; 7.1 max speed\nSecond stop: 4.45 miles; 41 min; 7.2 max\nThird stop: 5.17 miles; 48:30; 7.6 max"}
+              value={runTextInput}
+              onChange={e => setRunTextInput(e.target.value)}
+              style={{ ...g.input, width: "100%", minHeight: 100, resize: "vertical", fontSize: 11, lineHeight: 1.6, padding: "10px", boxSizing: "border-box", fontFamily: "system-ui, sans-serif" }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+              <button onPointerDown={e => e.preventDefault()} onClick={parseRunText}
+                disabled={runParsing || !runTextInput.trim()}
+                style={{ ...g.primary, flex: 1, padding: "9px 0", fontSize: 9, letterSpacing: 2, opacity: runTextInput.trim() ? 1 : 0.4 }}>
+                {runParsing ? "⟳ PARSING…" : "AUTO-FILL ✦"}
+              </button>
+              {runParseStatus === "done" && <span style={{ fontSize: 9, color: "#3a9e4f" }}>✓ FILLED</span>}
+              {runParseStatus === "error" && <span style={{ fontSize: 9, color: "#c0392b" }}>✕ TRY AGAIN</span>}
+            </div>
+          </div>
+        )}
+        {runParseStatus === "done" && !runTextMode && (
+          <div style={{ fontSize: 9, color: "#3a9e4f", marginTop: 6 }}>✓ Fields filled from your run log</div>
+        )}
       </div>
 
       {[["distance","Total Distance","mi","0.01"],["duration","Run Time","mm:ss",""],["firstStop","First Stop","mi","0.01"],["pace","Avg Pace","min/mi","0.01"],["heartRate","Heart Rate","bpm","1"],["maxSpeed","Max Speed","mph","0.1"]].map(([f, lbl, unit, step]) => (
