@@ -488,13 +488,26 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
     // Build completion stats for modal
     if (workoutType !== "run" && exercises.length) {
       const lastSession = getLastSession(workoutType);
-      const calcVol = (exList) => (exList || []).reduce((a, ex) =>
-        a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) =>
-          b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0);
-      const todayVol = calcVol(exercises);
-      const lastVol = lastSession ? calcVol(lastSession.exercises) : 0;
 
-      // Find PRs
+      // Per-exercise comparison
+      const exResults = exercises.map(ex => {
+        if (!ex.name) return null;
+        const filledSets = ex.sets.filter(s => s.reps || s.weight);
+        if (!filledSets.length) return null;
+        const lastEx = (lastSession?.exercises || []).find(e => e.name?.toLowerCase() === ex.name?.toLowerCase());
+        const lastFilled = lastEx?.sets.filter(s => s.reps || s.weight) || [];
+        const todayMaxW = Math.max(0, ...filledSets.map(s => parseFloat(s.weight)||0));
+        const lastMaxW = Math.max(0, ...lastFilled.map(s => parseFloat(s.weight)||0));
+        const todayMaxR = Math.max(0, ...filledSets.map(s => parseFloat(s.reps)||0));
+        const lastMaxR = Math.max(0, ...lastFilled.map(s => parseFloat(s.reps)||0));
+        const beatWeight = todayMaxW > lastMaxW && lastMaxW > 0;
+        const beatReps = todayMaxR > lastMaxR && lastMaxR > 0;
+        const tied = todayMaxW === lastMaxW && lastMaxW > 0;
+        const status = beatWeight ? "weight" : beatReps ? "reps" : tied ? "tied" : lastFilled.length ? "behind" : "new";
+        return { name: ex.name, todayMaxW, lastMaxW, todayMaxR, lastMaxR, status, sets: filledSets.length };
+      }).filter(Boolean);
+
+      // PRs — exercises beating all-time max
       const prs = [];
       exercises.forEach(ex => {
         const todayMax = Math.max(0, ...ex.sets.filter(s => s.weight).map(s => parseFloat(s.weight)||0));
@@ -510,8 +523,9 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         });
         if (todayMax > prevMax && prevMax > 0) prs.push({ name: ex.name, weight: todayMax, prev: prevMax });
       });
+
       setCompletionModal({
-        todayVol, lastVol, lastDate: lastSession?.date, prs, type: workoutType,
+        exResults, prs, type: workoutType, lastDate: lastSession?.date,
         saveDaily: async (dailyData, stretches) => {
           const today = new Date().toLocaleDateString();
           const entry = { id: Date.now(), date: today, ...dailyData, stretches: Object.keys(stretches).filter(k => stretches[k]) };
@@ -634,18 +648,23 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
             <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "24px 20px", width: "100%", maxWidth: 380 }}>
               <div style={{ fontSize: 10, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase", marginBottom: 16 }}>✓ Session Complete</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "#e8e0d5", fontFamily: "'DM Mono', monospace" }}>{Math.round(completionModal.todayVol).toLocaleString()}</div>
-                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>TODAY LBS</div>
+              {completionModal.exResults?.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  {completionModal.exResults.map((r, idx) => {
+                    const color = r.status === "weight" ? "#3a9e4f" : r.status === "reps" ? "#3a8fc4" : r.status === "tied" ? "#c49a1a" : r.status === "new" ? "#888" : "#c0392b";
+                    const icon = r.status === "weight" ? "↑ WEIGHT PR" : r.status === "reps" ? "↑ MORE REPS" : r.status === "tied" ? "= MATCHED" : r.status === "new" ? "NEW" : "↓ BEHIND";
+                    return (
+                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: idx < completionModal.exResults.length - 1 ? "1px solid #1a1a1a" : "none" }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "#ccc" }}>{r.name}</div>
+                          {r.lastMaxW > 0 && <div style={{ fontSize: 8, color: "#444", marginTop: 2 }}>{r.lastMaxR}×{r.lastMaxW} → {r.todayMaxR}×{r.todayMaxW}</div>}
+                        </div>
+                        <span style={{ fontSize: 7, fontWeight: 700, color, border: `1px solid ${color}`, borderRadius: 4, padding: "2px 6px", letterSpacing: 1 }}>{icon}</span>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: completionModal.todayVol >= completionModal.lastVol ? "#3a9e4f" : "#c0392b", fontFamily: "'DM Mono', monospace" }}>
-                    {completionModal.lastVol ? `${completionModal.todayVol >= completionModal.lastVol ? "+" : ""}${Math.round(((completionModal.todayVol - completionModal.lastVol) / completionModal.lastVol) * 100)}%` : "—"}
-                  </div>
-                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>VS LAST · {completionModal.lastDate || "N/A"}</div>
-                </div>
-              </div>
+              )}
               {completionModal.prs.length > 0 && (
                 <div style={{ background: "#0a1a0a", border: "1px solid #1a4020", borderRadius: 8, padding: "10px 12px", marginBottom: 16 }}>
                   <div style={{ fontSize: 8, letterSpacing: 2, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 8 }}>🏆 New PRs</div>
@@ -767,18 +786,23 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
             <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "24px 20px", width: "100%", maxWidth: 380 }}>
               <div style={{ fontSize: 10, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase", marginBottom: 4 }}>✓ {completionModal.type} Complete</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16, marginTop: 16 }}>
-                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "#e8e0d5", fontFamily: "'DM Mono', monospace" }}>{Math.round(completionModal.todayVol).toLocaleString()}</div>
-                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>TODAY LBS</div>
+              {completionModal.exResults?.length > 0 && (
+                <div style={{ marginBottom: 16, marginTop: 16 }}>
+                  {completionModal.exResults.map((r, idx) => {
+                    const color = r.status === "weight" ? "#3a9e4f" : r.status === "reps" ? "#3a8fc4" : r.status === "tied" ? "#c49a1a" : r.status === "new" ? "#888" : "#c0392b";
+                    const icon = r.status === "weight" ? "↑ WEIGHT PR" : r.status === "reps" ? "↑ MORE REPS" : r.status === "tied" ? "= MATCHED" : r.status === "new" ? "NEW" : "↓ BEHIND";
+                    return (
+                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: idx < completionModal.exResults.length - 1 ? "1px solid #1a1a1a" : "none" }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "#ccc" }}>{r.name}</div>
+                          {r.lastMaxW > 0 && <div style={{ fontSize: 8, color: "#444", marginTop: 2 }}>{r.lastMaxR}×{r.lastMaxW} → {r.todayMaxR}×{r.todayMaxW}</div>}
+                        </div>
+                        <span style={{ fontSize: 7, fontWeight: 700, color, border: `1px solid ${color}`, borderRadius: 4, padding: "2px 6px", letterSpacing: 1 }}>{icon}</span>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div style={{ ...g.card, padding: "12px", textAlign: "center" }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: completionModal.lastVol ? (completionModal.todayVol >= completionModal.lastVol ? "#3a9e4f" : "#c0392b") : "#555", fontFamily: "'DM Mono', monospace" }}>
-                    {completionModal.lastVol ? `${completionModal.todayVol >= completionModal.lastVol ? "+" : ""}${Math.round(((completionModal.todayVol - completionModal.lastVol) / completionModal.lastVol) * 100)}%` : "FIRST"}
-                  </div>
-                  <div style={{ fontSize: 7, color: "#555", letterSpacing: 2, marginTop: 3 }}>VS {completionModal.lastDate || "N/A"}</div>
-                </div>
-              </div>
+              )}
               {completionModal.prs?.length > 0 && (
                 <div style={{ background: "#0a1a0a", border: "1px solid #1a4020", borderRadius: 8, padding: "10px 12px", marginBottom: 16 }}>
                   <div style={{ fontSize: 8, letterSpacing: 2, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 8 }}>🏆 New PRs This Session</div>
@@ -923,16 +947,51 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
 
         <button style={{ ...g.ghost, width: "100%", marginBottom: 10 }} onClick={() => setExercises([...exercises, { name: "", sets: [{ reps: "", weight: "" }] }])}>+ ADD EXERCISE</button>
 
-        {/* Live volume comparison */}
+        {/* Per-exercise progression summary */}
         {(() => {
           const lastSession = getLastSession(workoutType);
           if (!lastSession) return null;
-          const todayVol = exercises.reduce((a, ex) => a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) => b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0);
-          const lastVol = (lastSession.exercises || []).reduce((a, ex) => a + ex.sets.filter(s => s.reps || s.weight).reduce((b, s) => b + (parseFloat(s.weight)||0) * (parseFloat(s.reps)||0), 0), 0);
-          if (!lastVol) return null;
-          const pct = Math.min(200, Math.round((todayVol / lastVol) * 100));
-          const ahead = todayVol >= lastVol;
-          const diff = Math.abs(todayVol - lastVol);
+          const results = exercises.map(ex => {
+            if (!ex.name) return null;
+            const filledSets = ex.sets.filter(s => s.reps || s.weight);
+            if (!filledSets.length) return null;
+            const lastEx = (lastSession.exercises || []).find(e => e.name?.toLowerCase() === ex.name?.toLowerCase());
+            if (!lastEx) return null;
+            const lastFilled = lastEx.sets.filter(s => s.reps || s.weight);
+            const todayMaxW = Math.max(0, ...filledSets.map(s => parseFloat(s.weight)||0));
+            const lastMaxW = Math.max(0, ...lastFilled.map(s => parseFloat(s.weight)||0));
+            const todayMaxR = Math.max(0, ...filledSets.map(s => parseFloat(s.reps)||0));
+            const lastMaxR = Math.max(0, ...lastFilled.map(s => parseFloat(s.reps)||0));
+            const beatWeight = todayMaxW > lastMaxW;
+            const tiedWeight = todayMaxW === lastMaxW && todayMaxW > 0;
+            const beatReps = todayMaxR > lastMaxR;
+            const status = beatWeight ? "weight" : beatReps ? "reps" : tiedWeight ? "tied" : "behind";
+            return { name: ex.name, todayMaxW, lastMaxW, todayMaxR, lastMaxR, status };
+          }).filter(Boolean);
+
+          if (!results.length) return null;
+
+          return (
+            <div style={{ ...g.card, padding: "12px 14px", marginBottom: 10 }}>
+              <div style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 10 }}>Exercise Progress vs Last Session</div>
+              {results.map((r, idx) => {
+                const color = r.status === "weight" ? "#3a9e4f" : r.status === "reps" ? "#3a8fc4" : r.status === "tied" ? "#c49a1a" : "#c0392b";
+                const icon = r.status === "weight" ? "↑ PR" : r.status === "reps" ? "↑ REPS" : r.status === "tied" ? "= MATCHED" : "↓ BEHIND";
+                return (
+                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 7, marginBottom: 7, borderBottom: idx < results.length - 1 ? "1px solid #141414" : "none" }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#ccc" }}>{r.name}</div>
+                      <div style={{ fontSize: 8, color: "#444", marginTop: 2 }}>
+                        Last: {r.lastMaxR}×{r.lastMaxW}lbs → Today: {r.todayMaxR}×{r.todayMaxW}lbs
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 8, fontWeight: 700, color, border: `1px solid ${color}`, borderRadius: 4, padding: "2px 6px", letterSpacing: 1 }}>{icon}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
           return (
             <div style={{ ...g.card, padding: "12px 14px", marginBottom: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
