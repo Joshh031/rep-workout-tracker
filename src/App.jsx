@@ -992,33 +992,6 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
             </div>
           );
         })()}
-          return (
-            <div style={{ ...g.card, padding: "12px 14px", marginBottom: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ fontSize: 8, letterSpacing: 2, color: "#555", textTransform: "uppercase" }}>Volume vs Last Session</span>
-                <span style={{ fontSize: 9, fontWeight: 700, color: ahead ? "#3a9e4f" : "#c49a1a" }}>
-                  {todayVol > 0 ? `${ahead ? "+" : "-"}${Math.round(diff).toLocaleString()} lbs (${pct}%)` : "—"}
-                </span>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                <div>
-                  <div style={{ fontSize: 7, color: "#ff4d00", letterSpacing: 1, marginBottom: 3 }}>TODAY</div>
-                  <div style={{ height: 4, background: "#1a1a1a", borderRadius: 2 }}>
-                    <div style={{ height: "100%", width: `${Math.min(100, (todayVol / Math.max(todayVol, lastVol)) * 100)}%`, background: "#ff4d00", borderRadius: 2, transition: "width 0.3s" }} />
-                  </div>
-                  <div style={{ fontSize: 9, color: "#888", marginTop: 3 }}>{Math.round(todayVol).toLocaleString()}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 7, color: "#444", letterSpacing: 1, marginBottom: 3 }}>LAST · {lastSession.date}</div>
-                  <div style={{ height: 4, background: "#1a1a1a", borderRadius: 2 }}>
-                    <div style={{ height: "100%", width: `${Math.min(100, (lastVol / Math.max(todayVol, lastVol)) * 100)}%`, background: "#333", borderRadius: 2 }} />
-                  </div>
-                  <div style={{ fontSize: 9, color: "#444", marginTop: 3 }}>{Math.round(lastVol).toLocaleString()}</div>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
 
         <button style={g.primary} onClick={saveWorkout}>{saved ? "✓  SESSION SAVED" : "SAVE SESSION"}</button>
       </div>
