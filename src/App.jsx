@@ -572,6 +572,22 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   };
   const lastRun = history.find(h => h.type === "run");
 
+  // Goal suggestion for runs (computed only when needed below)
+  const computeRunGoals = (lr) => {
+    const lastDist = parseFloat(lr?.distance) || 0;
+    const goalDist = lastDist > 0 ? Math.max(4, +(lastDist + 0.1).toFixed(2)) : 4;
+    const lastPace = lr?.pace || "";
+    let goalPace = "";
+    if (lastPace.includes(":")) {
+      const [m, s] = lastPace.split(":").map(Number);
+      if (!isNaN(m) && !isNaN(s)) {
+        const totalSec = m * 60 + s - 5;
+        if (totalSec > 0) goalPace = `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, "0")}`;
+      }
+    }
+    return { lastDist, goalDist, goalPace };
+  };
+
   if (mode === "pick") return (
     <div style={g.page}>
       {showDraftBanner && pendingDraft && (
@@ -641,6 +657,106 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   if (mode === "preview") {
     const lastSession = getLastSession(workoutType);
     const lastExercises = lastSession?.exercises || [];
+
+    // Run-specific preview: last run stats + goal suggestions
+    if (workoutType === "run") {
+      const lr = lastSession?.runData;
+      const { lastDist, goalDist, goalPace } = computeRunGoals(lr);
+      return (
+        <div style={g.page}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+            <button onClick={() => setMode("pick")} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11 }}>←</button>
+            <span style={{ fontSize: 16 }}>⚡</span>
+            <span style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#888" }}>RUN</span>
+            {lastSession && <span style={g.badge}>{lastSession.date}</span>}
+          </div>
+
+          {!lastSession ? (
+            <div style={{ ...g.card, padding: "20px", textAlign: "center", marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: "#555" }}>No previous run logged.</div>
+              <div style={{ fontSize: 10, color: "#333", marginTop: 4 }}>This is your baseline — aim for 4 miles.</div>
+            </div>
+          ) : (
+            <div style={{ ...g.card, overflow: "hidden", marginBottom: 14 }}>
+              <div style={{ background: "#0f0f0f", padding: "10px 14px", borderBottom: "1px solid #252525" }}>
+                <div style={{ fontSize: 8, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase" }}>Last Run · {lastSession.date}</div>
+              </div>
+              <div style={{ padding: "16px 14px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+                  <div>
+                    <div style={{ fontSize: 7, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 4 }}>Distance</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: "#e8e0d5", fontFamily: "'DM Mono', monospace" }}>
+                      {lr?.distance || "—"}<span style={{ fontSize: 11, color: "#666", marginLeft: 4 }}>mi</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 7, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 4 }}>Duration</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: "#e8e0d5", fontFamily: "'DM Mono', monospace" }}>
+                      {lr?.duration || "—"}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+                  {[
+                    ["Pace", lr?.pace, "/mi"],
+                    ["HR", lr?.heartRate, "bpm"],
+                    ["Max Spd", lr?.maxSpeed, "mph"],
+                  ].map(([label, val, unit]) => (
+                    <div key={label} style={{ background: "#0f0f0f", border: "1px solid #1a1a1a", borderRadius: 5, padding: "8px 6px", textAlign: "center" }}>
+                      <div style={{ fontSize: 7, letterSpacing: 1, color: "#555", textTransform: "uppercase", marginBottom: 3 }}>{label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: val ? "#e8e0d5" : "#333", fontFamily: "'DM Mono', monospace" }}>{val || "—"}</div>
+                      <div style={{ fontSize: 7, color: "#444", marginTop: 2 }}>{unit}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {(lr?.location || lr?.feel || lr?.stopReason) && (
+                  <div style={{ fontSize: 9, color: "#666", marginBottom: lr?.notes ? 8 : 0, lineHeight: 1.7 }}>
+                    {[lr.location, lr.feel, lr.stopReason && `stopped: ${lr.stopReason}`].filter(Boolean).join(" · ")}
+                  </div>
+                )}
+
+                {lr?.notes && (
+                  <div style={{ fontSize: 10, color: "#666", fontStyle: "italic", lineHeight: 1.6, paddingTop: 8, borderTop: "1px solid #141414" }}>
+                    "{lr.notes}"
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div style={{ ...g.card, background: "#0a1a0a", border: "1px solid #1a3a1a", padding: "14px 16px", marginBottom: 14 }}>
+            <div style={{ fontSize: 8, letterSpacing: 3, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 10 }}>◈ Today's Targets</div>
+            <div style={{ display: "grid", gridTemplateColumns: goalPace ? "1fr 1fr" : "1fr", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 7, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 4 }}>Distance</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#3a9e4f", fontFamily: "'DM Mono', monospace" }}>
+                  {goalDist}<span style={{ fontSize: 10, color: "#3a9e4f", marginLeft: 3 }}>mi</span>
+                </div>
+                <div style={{ fontSize: 8, color: "#555", marginTop: 3 }}>
+                  {lastDist > 0 && goalDist > lastDist ? `+${(goalDist - lastDist).toFixed(2)} vs last` : "baseline target"}
+                </div>
+              </div>
+              {goalPace && (
+                <div>
+                  <div style={{ fontSize: 7, letterSpacing: 2, color: "#555", textTransform: "uppercase", marginBottom: 4 }}>Pace</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "#3a9e4f", fontFamily: "'DM Mono', monospace" }}>
+                    {goalPace}<span style={{ fontSize: 10, color: "#3a9e4f", marginLeft: 3 }}>/mi</span>
+                  </div>
+                  <div style={{ fontSize: 8, color: "#555", marginTop: 3 }}>−5s vs last</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <button onClick={launchWorkout} style={{ ...g.primary, fontSize: 11, letterSpacing: 3 }}>
+            START RUN →
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div style={g.page}>
         {/* Completion modal overlay */}
