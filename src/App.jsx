@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Fragment } from "react";
 
 const EXERCISE_DB = {
   chest:     { staples: ["Bench Press", "Incline Bench", "Cable Fly", "Dumbbell Press", "Push-Up"], alternatives: ["Decline Bench", "Pec Deck", "Landmine Press", "Dips", "Cable Crossover", "Chest Pullover", "Floor Press", "Svend Press"] },
@@ -1758,11 +1758,11 @@ function WorkoutHistoryCard({ entry: e, onDelete }) {
                   <span style={{ fontSize: 7, color: "#444", letterSpacing: 1 }}>REPS</span>
                   <span style={{ fontSize: 7, color: "#444", letterSpacing: 1 }}>LBS</span>
                   {filledSets.map((s, j) => (
-                    <>
-                      <span key={`n${j}`} style={{ fontSize: 9, color: "#555" }}>{j + 1}</span>
-                      <span key={`r${j}`} style={{ fontSize: 11, color: "#ccc", fontWeight: 600 }}>{s.reps || "—"}</span>
-                      <span key={`w${j}`} style={{ fontSize: 11, color: "#ccc", fontWeight: 600 }}>{s.weight || "—"}</span>
-                    </>
+                    <Fragment key={j}>
+                      <span style={{ fontSize: 9, color: "#555" }}>{j + 1}</span>
+                      <span style={{ fontSize: 11, color: "#ccc", fontWeight: 600 }}>{s.reps || "—"}</span>
+                      <span style={{ fontSize: 11, color: "#ccc", fontWeight: 600 }}>{s.weight || "—"}</span>
+                    </Fragment>
                   ))}
                 </div>
               </div>
@@ -2360,11 +2360,6 @@ export default function App() {
     loadData();
   }, []);
 
-  const persist = async (h, d, s) => {
-    // We persist individual entries — this is called after each save
-    // Individual saves handled in each tab's save function
-  };
-
   const saveWorkoutEntry = async (entry) => {
     await sbFetch("workouts", "POST", { user_id: userId, data: entry });
   };
@@ -2396,7 +2391,6 @@ export default function App() {
     await sbFetch("sleep_logs", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
   };
 
-  const todayDateStr = new Date().toLocaleDateString();
   const todayDaily = dailyLog.find(d => {
     // Match against today in any locale format
     const entryDate = new Date(d.date);
