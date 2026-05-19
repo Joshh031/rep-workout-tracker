@@ -1,5 +1,17 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 
+// Normalize exercise names for fuzzy comparison.
+// "Iso-Lateral Shoulder Press", "iso lateral shoulder press", "Iso_lateral shoulder press!"
+// all collapse to the same key. Display data keeps original capitalization.
+function normalizeName(name) {
+  if (!name) return "";
+  return name.toLowerCase()
+    .replace(/[-_]/g, " ")
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const EXERCISE_DB = {
   chest:     { staples: ["Bench Press", "Incline Bench", "Cable Fly", "Dumbbell Press", "Push-Up"], alternatives: ["Decline Bench", "Pec Deck", "Landmine Press", "Dips", "Cable Crossover", "Chest Pullover", "Floor Press", "Svend Press"] },
   back:      { staples: ["Pull-Up", "Barbell Row", "Lat Pulldown", "Seated Cable Row", "Face Pull", "Shrugs"], alternatives: ["T-Bar Row", "Single-Arm DB Row", "Meadows Row", "Chest-Supported Row", "Straight-Arm Pulldown", "Rack Pull", "Good Morning", "Reverse Fly"] },
@@ -494,7 +506,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         if (!ex.name) return null;
         const filledSets = ex.sets.filter(s => s.reps || s.weight);
         if (!filledSets.length) return null;
-        const lastEx = (lastSession?.exercises || []).find(e => e.name?.toLowerCase() === ex.name?.toLowerCase());
+        const lastEx = (lastSession?.exercises || []).find(e => normalizeName(e.name) === normalizeName(ex.name));
         const lastFilled = lastEx?.sets.filter(s => s.reps || s.weight) || [];
         const todayMaxW = filledSets.length ? Math.max(...filledSets.map(s => parseFloat(s.weight)||0)) : 0;
         const lastMaxW = lastFilled.length ? Math.max(...lastFilled.map(s => parseFloat(s.weight)||0)) : 0;
@@ -515,7 +527,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         let prevMax = 0;
         history.forEach(session => {
           (session.exercises || []).forEach(pex => {
-            if (pex.name?.toLowerCase() === ex.name?.toLowerCase()) {
+            if (normalizeName(pex.name) === normalizeName(ex.name)) {
               const m = Math.max(0, ...pex.sets.filter(s => s.weight).map(s => parseFloat(s.weight)||0));
               if (m > prevMax) prevMax = m;
             }
@@ -551,10 +563,11 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   // Find last time each exercise was performed
   const getLastPerformance = (exName) => {
     if (!exName) return null;
-    const name = exName.trim().toLowerCase();
+    const name = normalizeName(exName);
+    if (!name) return null;
     for (const session of history) {
       if (!session.exercises) continue;
-      const match = session.exercises.find(e => e.name?.trim().toLowerCase() === name);
+      const match = session.exercises.find(e => normalizeName(e.name) === name);
       if (match && match.sets?.length) {
         // Find best set (highest weight with reps)
         const filledSets = match.sets.filter(s => s.reps || s.weight);
@@ -1071,7 +1084,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
             if (!ex.name) return null;
             const filledSets = ex.sets.filter(s => s.reps || s.weight);
             if (!filledSets.length) return null;
-            const lastEx = (lastSession.exercises || []).find(e => e.name?.toLowerCase() === ex.name?.toLowerCase());
+            const lastEx = (lastSession.exercises || []).find(e => normalizeName(e.name) === normalizeName(ex.name));
             if (!lastEx) return null;
             const lastFilled = lastEx.sets.filter(s => s.reps || s.weight);
             const todayMaxW = filledSets.length ? Math.max(...filledSets.map(s => parseFloat(s.weight)||0)) : 0;
@@ -2202,31 +2215,34 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
 
       {/* PR VIEW */}
       {view === "prs" && (() => {
-        // Build all-time max for every exercise across all sessions
+        // Build all-time max for every exercise across all sessions.
+        // Key by normalized name so casing/punctuation variants merge,
+        // but keep the first-seen original spelling for display.
         const prMap = {};
         history.forEach(session => {
           (session.exercises || []).forEach(ex => {
             if (!ex.name) return;
-            const name = ex.name.trim();
+            const key = normalizeName(ex.name);
+            if (!key) return;
             ex.sets.forEach(s => {
               const w = parseFloat(s.weight) || 0;
               const r = parseFloat(s.reps) || 0;
               if (!w && !r) return;
-              if (!prMap[name]) prMap[name] = { maxWeight: 0, maxReps: 0, maxVol: 0, date: "", type: session.type };
+              if (!prMap[key]) prMap[key] = { displayName: ex.name.trim(), maxWeight: 0, maxReps: 0, maxVol: 0, date: "", type: session.type };
               const vol = w * r;
-              if (w > prMap[name].maxWeight) { prMap[name].maxWeight = w; prMap[name].date = session.date; }
-              if (r > prMap[name].maxReps) prMap[name].maxReps = r;
-              if (vol > prMap[name].maxVol) prMap[name].maxVol = vol;
+              if (w > prMap[key].maxWeight) { prMap[key].maxWeight = w; prMap[key].date = session.date; }
+              if (r > prMap[key].maxReps) prMap[key].maxReps = r;
+              if (vol > prMap[key].maxVol) prMap[key].maxVol = vol;
             });
           });
         });
 
         // Group by workout type
         const byType = {};
-        Object.entries(prMap).forEach(([name, data]) => {
+        Object.values(prMap).forEach(data => {
           const type = data.type || "other";
           if (!byType[type]) byType[type] = [];
-          byType[type].push({ name, ...data });
+          byType[type].push({ name: data.displayName, ...data });
         });
 
         // Sort each group by max weight desc
