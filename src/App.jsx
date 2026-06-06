@@ -432,8 +432,8 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   // Build a list of missed logs over the last 7 days (excluding today)
   const backlog = (() => {
     const workoutDates = new Set(history.map(h => h.date));
-    const dailyDates = new Set(dailyLog.map(d => d.date));
     const sleepDates = new Set(sleepLog.map(s => s.date));
+    const dailyByDate = new Map(dailyLog.map(d => [d.date, d]));
     const items = [];
     const today = new Date();
     for (let i = 1; i <= 7; i++) {
@@ -443,7 +443,14 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
       const missing = [];
       if (!workoutDates.has(dateStr)) missing.push("no workout");
       if (!sleepDates.has(dateStr)) missing.push("no sleep");
-      if (!dailyDates.has(dateStr)) missing.push("no daily");
+      const daily = dailyByDate.get(dateStr);
+      if (!daily) {
+        missing.push("no daily");
+      } else {
+        // Match the app's notion of a complete daily: some metric + stretches
+        if (!(daily.crunches || daily.planks || daily.pushups)) missing.push("partial daily");
+        if (!daily.stretches?.length) missing.push("no stretches");
+      }
       if (missing.length > 0) {
         items.push({ label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }), missing });
       }
