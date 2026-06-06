@@ -415,7 +415,7 @@ function QuickFillBar({ onApply, vacationMode }) {
 }
 
 // ── WORKOUT TAB ────────────────────────────────────────────────────────────
-function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, setDailyLog, saveDailyEntry, sleepLog, needsReminder, needsDailyLog, needsStretches, onGoToDaily }) {
+function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, setDailyLog, saveDailyEntry, sleepLog, needsReminder, needsDailyLog, needsStretches, onGoToDaily, onGoToHistory }) {
   const [mode, setMode] = useState("pick"); // pick | preview | log
   const [workoutType, setWorkoutType] = useState(null);
   const [exercises, setExercises] = useState([]);
@@ -426,7 +426,30 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   const [completionModal, setCompletionModal] = useState(null); // { todayVol, lastVol, lastDate, prs }
   const [postWorkoutDaily, setPostWorkoutDaily] = useState({ crunches: "", planks: "", pushups: "" });
   const [postStretch, setPostStretch] = useState({});
+  const [backlogDismissed, setBacklogDismissed] = useState(false);
   const autoSaveTimer = useRef(null);
+
+  // Build a list of missed logs over the last 7 days (excluding today)
+  const backlog = (() => {
+    const workoutDates = new Set(history.map(h => h.date));
+    const dailyDates = new Set(dailyLog.map(d => d.date));
+    const sleepDates = new Set(sleepLog.map(s => s.date));
+    const items = [];
+    const today = new Date();
+    for (let i = 1; i <= 7; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = d.toLocaleDateString();
+      const missing = [];
+      if (!workoutDates.has(dateStr)) missing.push("no workout");
+      if (!sleepDates.has(dateStr)) missing.push("no sleep");
+      if (!dailyDates.has(dateStr)) missing.push("no daily");
+      if (missing.length > 0) {
+        items.push({ label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }), missing });
+      }
+    }
+    return items;
+  })();
 
   // Auto-save draft to localStorage whenever exercises change
   useEffect(() => {
@@ -615,6 +638,25 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
           </div>
         </div>
       )}
+
+      {!backlogDismissed && backlog.length > 0 && (
+        <div style={{ background: "#1a0d00", border: "1px solid #3a1a00", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
+          <div style={{ fontSize: 9, letterSpacing: 2, color: "#ff4d00", textTransform: "uppercase", marginBottom: 8 }}>◉ Backlog · {backlog.length} day{backlog.length === 1 ? "" : "s"} incomplete</div>
+          {backlog.slice(0, 5).map((item, i) => (
+            <div key={i} style={{ fontSize: 10, color: "#888", marginBottom: 4 }}>
+              {item.label} — {item.missing.join(", ")}
+            </div>
+          ))}
+          {backlog.length > 5 && (
+            <div style={{ fontSize: 10, color: "#888", marginBottom: 4 }}>+ {backlog.length - 5} more</div>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button onClick={onGoToHistory} style={{ ...g.primary, flex: 1, padding: "9px 0", fontSize: 9 }}>REVIEW</button>
+            <button onClick={() => setBacklogDismissed(true)} style={{ ...g.ghost, flex: 1, padding: "9px 0", fontSize: 9, color: "#888" }}>DISMISS</button>
+          </div>
+        </div>
+      )}
+
       <WhatsNext history={history} onSelect={(type) => startWorkout(type)} />
 
       {needsReminder && (
@@ -2589,7 +2631,7 @@ export default function App() {
           </div>
         ) : (
           <>
-            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} onGoToDaily={() => setTab("daily")} />}
+            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} onGoToDaily={() => setTab("daily")} onGoToHistory={() => setTab("history")} />}
             {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} history={history} sleepLog={sleepLog} />}
             {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} history={history} dailyLog={dailyLog} />}
             {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
