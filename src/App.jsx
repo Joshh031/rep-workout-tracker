@@ -29,6 +29,32 @@ const STRETCHES = [
   { key: "hips",       label: "Hips",       duration: 180, icon: "◉", tip: "Pigeon pose or figure-4" },
 ];
 
+// Guided breathing protocols. Each phase is [label, seconds]. One full pass
+// through the phases is a "round". Inhale grows the orb, exhale shrinks it,
+// holds keep it where it is.
+const BREATH_PROTOCOLS = [
+  {
+    key: "box", label: "Box Breathing", tagline: "Calm + focus reset",
+    phases: [["Inhale", 4], ["Hold", 4], ["Exhale", 4], ["Hold", 4]],
+    defaultRounds: 6, color: "#ff4d00",
+  },
+  {
+    key: "478", label: "4-7-8 Breath", tagline: "Wind-down · pre-nap",
+    phases: [["Inhale", 4], ["Hold", 7], ["Exhale", 8]],
+    defaultRounds: 4, color: "#5a8dd6",
+  },
+];
+
+// Target orb scale for each phase: inhale → full, exhale → small, hold → stay.
+function breathScaleTargets(phases) {
+  let cur = 0.42;
+  return phases.map(([name]) => {
+    if (name === "Inhale") cur = 1;
+    else if (name === "Exhale") cur = 0.42;
+    return cur;
+  });
+}
+
 const WORKOUT_TYPES = ["run", "chest", "legs", "shoulders", "back", "biceps", "triceps", "vacation"];
 const ICON = { run: "⚡", chest: "💪", legs: "🦵", shoulders: "🏋️", back: "🔱", biceps: "💥", triceps: "⚙️", vacation: "🏖️" };
 
@@ -109,6 +135,152 @@ function StretchTimer({ stretch, completed, onComplete }) {
   );
 }
 
+// ── BREATHING ──────────────────────────────────────────────────────────────
+// Guided box / 4-7-8 breathing. Drives an animated orb through inhale / hold /
+// exhale phases for N rounds, then reports the protocol + rounds completed.
+function BreathSession({ done, onComplete }) {
+  const [protoKey, setProtoKey] = useState(BREATH_PROTOCOLS[0].key);
+  const proto = BREATH_PROTOCOLS.find(p => p.key === protoKey);
+  const targets = breathScaleTargets(proto.phases);
+
+  const [rounds, setRounds] = useState(proto.defaultRounds);
+  const [running, setRunning] = useState(false);
+  const [round, setRound] = useState(0);       // rounds fully completed this session
+  const [phaseIdx, setPhaseIdx] = useState(0);
+  const [secLeft, setSecLeft] = useState(proto.phases[0][1]);
+  const [scale, setScale] = useState(0.42);
+  const engine = useRef({ round: 0, phaseIdx: 0, secLeft: 0 });
+  const tick = useRef(null);
+
+  const stop = () => {
+    clearInterval(tick.current);
+    setRunning(false);
+    setRound(0); setPhaseIdx(0); setSecLeft(proto.phases[0][1]); setScale(0.42);
+  };
+
+  const selectProto = (k) => {
+    if (running) return;
+    const p = BREATH_PROTOCOLS.find(x => x.key === k);
+    setProtoKey(k);
+    setRounds(p.defaultRounds);
+    setRound(0); setPhaseIdx(0); setSecLeft(p.phases[0][1]); setScale(0.42);
+  };
+
+  const start = () => {
+    engine.current = { round: 0, phaseIdx: 0, secLeft: proto.phases[0][1] };
+    setRound(0); setPhaseIdx(0); setSecLeft(proto.phases[0][1]);
+    setScale(targets[0]); // begin first inhale → grow
+    setRunning(true);
+  };
+
+  useEffect(() => {
+    if (!running) return;
+    tick.current = setInterval(() => {
+      const e = engine.current;
+      if (e.secLeft > 1) {
+        e.secLeft -= 1;
+        setSecLeft(e.secLeft);
+        return;
+      }
+      // current phase just ended — advance
+      let nextPhase = e.phaseIdx + 1;
+      let nextRound = e.round;
+      if (nextPhase >= proto.phases.length) {
+        nextPhase = 0;
+        nextRound = e.round + 1;
+        if (nextRound >= rounds) {
+          clearInterval(tick.current);
+          setRunning(false);
+          setRound(rounds);
+          onComplete(proto.key, rounds);
+          return;
+        }
+      }
+      e.phaseIdx = nextPhase;
+      e.round = nextRound;
+      e.secLeft = proto.phases[nextPhase][1];
+      setPhaseIdx(nextPhase);
+      setRound(nextRound);
+      setSecLeft(e.secLeft);
+      setScale(targets[nextPhase]);
+    }, 1000);
+    return () => clearInterval(tick.current);
+  }, [running]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const phaseName = proto.phases[phaseIdx][0];
+  const isMove = phaseName === "Inhale" || phaseName === "Exhale";
+  const transDur = isMove ? secLeft : 0.4; // animate over the whole inhale/exhale
+  const orb = 168;
+
+  return (
+    <div style={{ ...g.card, padding: "16px 14px", marginBottom: 20 }}>
+      {/* Protocol picker */}
+      <div style={{ display: "flex", gap: 8, marginBottom: running ? 18 : 14 }}>
+        {BREATH_PROTOCOLS.map(p => {
+          const sel = p.key === protoKey;
+          return (
+            <button key={p.key} onClick={() => selectProto(p.key)} disabled={running}
+              style={{
+                flex: 1, textAlign: "left", cursor: running ? "default" : "pointer",
+                background: sel ? "#1c1008" : "#181818",
+                border: `1px solid ${sel ? p.color : "#252525"}`,
+                borderRadius: 7, padding: "9px 11px", fontFamily: "'DM Mono', monospace",
+                opacity: running && !sel ? 0.4 : 1, transition: "all 0.2s",
+              }}>
+              <div style={{ fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: sel ? p.color : "#aaa", fontWeight: 600, marginBottom: 3 }}>{p.label}</div>
+              <div style={{ fontSize: 8, color: "#777", letterSpacing: 1 }}>{p.tagline}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Orb */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 0 14px" }}>
+        <div style={{ position: "relative", width: orb, height: orb, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{
+            position: "absolute", width: orb, height: orb, borderRadius: "50%",
+            border: "1px dashed #2a2a2a",
+          }} />
+          <div style={{
+            width: orb, height: orb, borderRadius: "50%", flexShrink: 0,
+            background: `radial-gradient(circle at 50% 40%, ${proto.color}33, ${proto.color}0d)`,
+            border: `2px solid ${proto.color}`,
+            transform: `scale(${scale})`,
+            transition: `transform ${transDur}s ${isMove ? "ease-in-out" : "linear"}`,
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          }}>
+            <div style={{ fontSize: 13, letterSpacing: 3, textTransform: "uppercase", color: proto.color, fontWeight: 700 }}>
+              {running ? phaseName : (done ? "Done" : "Ready")}
+            </div>
+            {running && <div style={{ fontSize: 24, fontWeight: 700, color: "#e8e0d5", marginTop: 2 }}>{secLeft}</div>}
+          </div>
+        </div>
+        <div style={{ fontSize: 9, letterSpacing: 2, color: "#777", textTransform: "uppercase", marginTop: 14 }}>
+          {running
+            ? `Round ${round + 1} / ${rounds}`
+            : done
+              ? `✓ Logged · ${done.rounds} rounds ${BREATH_PROTOCOLS.find(p => p.key === done.protocol)?.label || done.protocol}`
+              : `${rounds} rounds · ${proto.phases.map(p => p[1]).join("-")}`}
+        </div>
+      </div>
+
+      {/* Controls */}
+      {!running ? (
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => setRounds(r => Math.max(2, r - 1))} style={{ ...g.ghost, padding: "9px 12px" }}>−</button>
+          <span style={{ flex: 1, textAlign: "center", fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>{rounds} Rounds</span>
+          <button onClick={() => setRounds(r => Math.min(12, r + 1))} style={{ ...g.ghost, padding: "9px 12px" }}>+</button>
+          <button onClick={start} style={{ ...g.ghost, background: proto.color, borderColor: proto.color, color: "#fff", padding: "9px 18px", flex: 2 }}>
+            {done ? "BREATHE AGAIN" : "BEGIN"}
+          </button>
+        </div>
+      ) : (
+        <button onClick={stop} style={{ ...g.ghost, width: "100%", padding: "10px 0" }}>STOP</button>
+      )}
+    </div>
+  );
+}
+
 // ── VOICE DICTATION ────────────────────────────────────────────────────────
 function VoiceFill({ tab, onFill }) {
   const [listening, setListening] = useState(false);
@@ -150,8 +322,9 @@ function VoiceFill({ tab, onFill }) {
     setStatus("parsing");
     const prompts = {
       daily: `Extract daily fitness data from this text and return ONLY valid JSON with these optional fields:
-{"steps": number, "crunches": number, "planks": number, "pushups": number, "stretches": ["calves"|"quads"|"hamstrings"|"hips"]}
+{"steps": number, "crunches": number, "planks": number, "pushups": number, "stretches": ["calves"|"quads"|"hamstrings"|"hips"], "breathing": number, "breathProtocol": "box"|"478"}
 Accept any natural format like "100 crunches", "did 3 planks", "50 push-ups", "8500 steps", "stretched calves and quads", "did all stretches".
+For breathing: "breathing" is the number of rounds (e.g. "6 rounds of box breathing", "did my breathing", "5 minutes box breathing"). If they just say they breathed without a count, use 1. "breathProtocol" is "box" for box breathing / 4-4-4-4, or "478" for 4-7-8 / wind-down / pre-nap breathing.
 If they mention all stretches or full stretch routine, include all four: ["calves","quads","hamstrings","hips"].
 Text: "${text}"
 Return only JSON, no explanation.`,
@@ -415,7 +588,7 @@ function QuickFillBar({ onApply, vacationMode }) {
 }
 
 // ── WORKOUT TAB ────────────────────────────────────────────────────────────
-function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, setDailyLog, saveDailyEntry, sleepLog, needsReminder, needsDailyLog, needsStretches, onGoToDaily, onGoToHistory }) {
+function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, setDailyLog, saveDailyEntry, sleepLog, needsReminder, needsDailyLog, needsStretches, needsBreathing, onGoToDaily, onGoToHistory }) {
   const [mode, setMode] = useState("pick"); // pick | preview | log
   const [workoutType, setWorkoutType] = useState(null);
   const [exercises, setExercises] = useState([]);
@@ -447,9 +620,10 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
       if (!daily) {
         missing.push("no daily");
       } else {
-        // Match the app's notion of a complete daily: some metric + stretches
+        // Match the app's notion of a complete daily: some metric + stretches + breathing
         if (!(daily.crunches || daily.planks || daily.pushups)) missing.push("partial daily");
         if (!daily.stretches?.length) missing.push("no stretches");
+        if (!daily.breathing) missing.push("no breathing");
       }
       if (missing.length > 0) {
         items.push({ label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }), missing });
@@ -671,7 +845,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
           <div>
             <div style={{ fontSize: 8, letterSpacing: 2, color: "#ff4d00", textTransform: "uppercase", marginBottom: 3 }}>● Today's Log Incomplete</div>
             <div style={{ fontSize: 9, color: "#666" }}>
-              {[needsDailyLog && "crunches", needsStretches && "stretches"].filter(Boolean).join(" + ")} not logged yet
+              {[needsDailyLog && "crunches", needsStretches && "stretches", needsBreathing && "breathing"].filter(Boolean).join(" + ")} not logged yet
             </div>
           </div>
           <span style={{ fontSize: 11, color: "#ff4d00" }}>→</span>
@@ -1414,6 +1588,7 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
   const [daily, setDaily] = useState({ crunches: "", planks: "", pushups: "", steps: "" });
   const [logDate, setLogDate] = useState(todayStr());
   const [stretchDone, setStretchDone] = useState({});
+  const [breath, setBreath] = useState(null); // null | { protocol, rounds }
   const [saved, setSaved] = useState(false);
 
   const stretchCount = Object.values(stretchDone).filter(Boolean).length;
@@ -1432,19 +1607,26 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
         pushups: daily.pushups || existing.pushups,
         steps: daily.steps || existing.steps,
         stretches: [...new Set([...(existing.stretches || []), ...newStretches])],
+        breathing: breath ? breath.rounds : existing.breathing,
+        breathProtocol: breath ? breath.protocol : existing.breathProtocol,
       };
       const newD = dailyLog.map(d => d.date === displayDate ? merged : d);
       setDailyLog(newD);
       // Delete old entry and save merged
       await saveEntry(merged);
     } else {
-      const entry = { id: Date.now(), date: displayDate, ...daily, stretches: newStretches };
+      const entry = {
+        id: Date.now(), date: displayDate, ...daily, stretches: newStretches,
+        breathing: breath ? breath.rounds : "",
+        breathProtocol: breath ? breath.protocol : "",
+      };
       setDailyLog(prev => [entry, ...prev]);
       await saveEntry(entry);
     }
     setDaily({ crunches: "", planks: "", pushups: "", steps: "" });
     setLogDate(todayStr());
     setStretchDone({});
+    setBreath(null);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -1477,6 +1659,10 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
           const newStretches = {};
           parsed.stretches.forEach(s => { newStretches[s] = true; });
           setStretchDone(prev => ({ ...prev, ...newStretches }));
+        }
+        if (parsed.breathing !== undefined && parsed.breathing !== null) {
+          const protocol = BREATH_PROTOCOLS.find(p => p.key === parsed.breathProtocol)?.key || "box";
+          setBreath({ protocol, rounds: Number(parsed.breathing) || 1 });
         }
       }} />
 
@@ -1521,6 +1707,13 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
         ))}
       </div>
 
+      {/* Breathing */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 22, marginBottom: 12 }}>
+        <span style={g.label}>Breathing</span>
+        <span style={{ fontSize: 9, letterSpacing: 2, color: breath ? "#3a9e4f" : "#2a2a2a", textTransform: "uppercase", marginBottom: 12 }}>{breath ? "✓ done" : "0/1"}</span>
+      </div>
+      <BreathSession done={breath} onComplete={(protocol, rounds) => setBreath({ protocol, rounds })} />
+
       <button style={g.primary} onClick={saveDaily}>{saved ? "✓  LOGGED" : "LOG DAILY ROUTINE"}</button>
 
       {/* Recent daily logs */}
@@ -1536,8 +1729,9 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", fontSize: 11, color: "#aaa", marginBottom: d.stretches?.length ? 7 : 0 }}>
                 <span>✦ {d.crunches || 0}</span><span>◆ {d.planks || 0}</span><span>▲ {d.pushups || 0}</span>
               </div>
-              {d.steps && <div style={{ fontSize: 11, color: parseInt(d.steps) >= 10000 ? "#3a9e4f" : "#777", marginBottom: d.stretches?.length ? 7 : 0 }}>↳ {parseInt(d.steps).toLocaleString()} steps</div>}
-              {d.stretches?.length > 0 && <div style={{ fontSize: 10, color: "#3a9e4f" }}>🧘 {d.stretches.join(", ")}</div>}
+              {d.steps && <div style={{ fontSize: 11, color: parseInt(d.steps) >= 10000 ? "#3a9e4f" : "#777", marginBottom: (d.stretches?.length || d.breathing) ? 7 : 0 }}>↳ {parseInt(d.steps).toLocaleString()} steps</div>}
+              {d.stretches?.length > 0 && <div style={{ fontSize: 10, color: "#3a9e4f", marginBottom: d.breathing ? 7 : 0 }}>🧘 {d.stretches.join(", ")}</div>}
+              {d.breathing && <div style={{ fontSize: 10, color: "#5a8dd6" }}>◫ {d.breathing} rounds {BREATH_PROTOCOLS.find(p => p.key === d.breathProtocol)?.label || "breathing"}</div>}
             </div>
           ))}
         </>
@@ -2418,6 +2612,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                   {e.steps && <span>↳ {parseInt(e.steps).toLocaleString()} steps · </span>}
                   ✦ {e.crunches || 0} · ◆ {e.planks || 0} · ▲ {e.pushups || 0}
                   {e.stretches?.length > 0 && <span style={{ color: "#3a9e4f" }}> · 🧘 {e.stretches.join(", ")}</span>}
+                  {e.breathing && <span style={{ color: "#5a8dd6" }}> · ◫ {e.breathing}r {BREATH_PROTOCOLS.find(p => p.key === e.breathProtocol)?.label || "breath"}</span>}
                 </div>
               </div>
             );
@@ -2580,7 +2775,8 @@ export default function App() {
   });
   const needsDailyLog = !todayDaily || !(todayDaily.crunches || todayDaily.planks || todayDaily.pushups);
   const needsStretches = !todayDaily || !todayDaily.stretches?.length;
-  const needsReminder = needsDailyLog || needsStretches;
+  const needsBreathing = !todayDaily || !todayDaily.breathing;
+  const needsReminder = needsDailyLog || needsStretches || needsBreathing;
 
   const TABS = [
     { key: "workout", label: "WORKOUT", flex: 2 },
@@ -2638,7 +2834,7 @@ export default function App() {
           </div>
         ) : (
           <>
-            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} onGoToDaily={() => setTab("daily")} onGoToHistory={() => setTab("history")} />}
+            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} needsBreathing={needsBreathing} onGoToDaily={() => setTab("daily")} onGoToHistory={() => setTab("history")} />}
             {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} history={history} sleepLog={sleepLog} />}
             {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} history={history} dailyLog={dailyLog} />}
             {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
