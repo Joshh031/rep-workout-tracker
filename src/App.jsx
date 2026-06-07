@@ -32,18 +32,34 @@ const STRETCHES = [
 // Guided breathing protocols. Each phase is [label, seconds]. One full pass
 // through the phases is a "round". Inhale grows the orb, exhale shrinks it,
 // holds keep it where it is.
+const BREATH_GOAL_SEC = 240; // 4 minutes of breathing before it counts as "done"
+
 const BREATH_PROTOCOLS = [
   {
     key: "box", label: "Box Breathing", tagline: "Calm + focus reset",
     phases: [["Inhale", 4], ["Hold", 4], ["Exhale", 4], ["Hold", 4]],
-    defaultRounds: 6, color: "#ff4d00",
+    defaultRounds: 15, color: "#ff4d00", // 15 × 16s = 4:00
   },
   {
     key: "478", label: "4-7-8 Breath", tagline: "Wind-down · pre-nap",
     phases: [["Inhale", 4], ["Hold", 7], ["Exhale", 8]],
-    defaultRounds: 4, color: "#5a8dd6",
+    defaultRounds: 13, color: "#5a8dd6", // 13 × 19s = 4:07
   },
 ];
+
+// Seconds in one full pass through a protocol's phases.
+const roundSeconds = (proto) => proto.phases.reduce((s, [, sec]) => s + sec, 0);
+
+// Seconds of breathing logged for a daily entry. Falls back to estimating from
+// round count for entries saved before duration was tracked.
+function breathSecondsOf(entry) {
+  if (!entry) return 0;
+  if (entry.breathSeconds) return Number(entry.breathSeconds) || 0;
+  const proto = BREATH_PROTOCOLS.find(p => p.key === entry.breathProtocol) || BREATH_PROTOCOLS[0];
+  return (Number(entry.breathing) || 0) * roundSeconds(proto);
+}
+
+const fmtMMSS = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
 // Target orb scale for each phase: inhale → full, exhale → small, hold → stay.
 function breathScaleTargets(phases) {
@@ -138,24 +154,26 @@ function StretchTimer({ stretch, completed, onComplete }) {
 // ── BREATHING ──────────────────────────────────────────────────────────────
 // Guided box / 4-7-8 breathing. Drives an animated orb through inhale / hold /
 // exhale phases for N rounds, then reports the protocol + rounds completed.
-function BreathSession({ done, onComplete }) {
+function BreathSession({ bankedSec, goalSec, onComplete }) {
   const [protoKey, setProtoKey] = useState(BREATH_PROTOCOLS[0].key);
   const proto = BREATH_PROTOCOLS.find(p => p.key === protoKey);
   const targets = breathScaleTargets(proto.phases);
+  const roundSec = roundSeconds(proto);
 
   const [rounds, setRounds] = useState(proto.defaultRounds);
   const [running, setRunning] = useState(false);
   const [round, setRound] = useState(0);       // rounds fully completed this session
   const [phaseIdx, setPhaseIdx] = useState(0);
   const [secLeft, setSecLeft] = useState(proto.phases[0][1]);
+  const [elapsed, setElapsed] = useState(0);   // seconds into the running session
   const [scale, setScale] = useState(0.42);
-  const engine = useRef({ round: 0, phaseIdx: 0, secLeft: 0 });
+  const engine = useRef({ round: 0, phaseIdx: 0, secLeft: 0, elapsed: 0 });
   const tick = useRef(null);
 
   const stop = () => {
     clearInterval(tick.current);
     setRunning(false);
-    setRound(0); setPhaseIdx(0); setSecLeft(proto.phases[0][1]); setScale(0.42);
+    setRound(0); setPhaseIdx(0); setSecLeft(proto.phases[0][1]); setElapsed(0); setScale(0.42);
   };
 
   const selectProto = (k) => {
@@ -163,12 +181,12 @@ function BreathSession({ done, onComplete }) {
     const p = BREATH_PROTOCOLS.find(x => x.key === k);
     setProtoKey(k);
     setRounds(p.defaultRounds);
-    setRound(0); setPhaseIdx(0); setSecLeft(p.phases[0][1]); setScale(0.42);
+    setRound(0); setPhaseIdx(0); setSecLeft(p.phases[0][1]); setElapsed(0); setScale(0.42);
   };
 
   const start = () => {
-    engine.current = { round: 0, phaseIdx: 0, secLeft: proto.phases[0][1] };
-    setRound(0); setPhaseIdx(0); setSecLeft(proto.phases[0][1]);
+    engine.current = { round: 0, phaseIdx: 0, secLeft: proto.phases[0][1], elapsed: 0 };
+    setRound(0); setPhaseIdx(0); setSecLeft(proto.phases[0][1]); setElapsed(0);
     setScale(targets[0]); // begin first inhale → grow
     setRunning(true);
   };
@@ -177,6 +195,8 @@ function BreathSession({ done, onComplete }) {
     if (!running) return;
     tick.current = setInterval(() => {
       const e = engine.current;
+      e.elapsed += 1;
+      setElapsed(e.elapsed);
       if (e.secLeft > 1) {
         e.secLeft -= 1;
         setSecLeft(e.secLeft);
@@ -192,7 +212,7 @@ function BreathSession({ done, onComplete }) {
           clearInterval(tick.current);
           setRunning(false);
           setRound(rounds);
-          onComplete(proto.key, rounds);
+          onComplete(proto.key, rounds, rounds * roundSec);
           return;
         }
       }
@@ -212,10 +232,16 @@ function BreathSession({ done, onComplete }) {
   const transDur = isMove ? secLeft : 0.4; // animate over the whole inhale/exhale
   const orb = 168;
 
+  // Progress toward the daily goal: already-banked seconds + this live session.
+  const totalSec = bankedSec + elapsed;
+  const goalMet = totalSec >= goalSec;
+  const goalPct = Math.min((totalSec / goalSec) * 100, 100);
+  const sessionDur = rounds * roundSec;
+
   return (
     <div style={{ ...g.card, padding: "16px 14px", marginBottom: 20 }}>
       {/* Protocol picker */}
-      <div style={{ display: "flex", gap: 8, marginBottom: running ? 18 : 14 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         {BREATH_PROTOCOLS.map(p => {
           const sel = p.key === protoKey;
           return (
@@ -234,6 +260,19 @@ function BreathSession({ done, onComplete }) {
         })}
       </div>
 
+      {/* Daily goal progress */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>Daily Goal · 4:00</span>
+          <span style={{ fontSize: 8, letterSpacing: 2, color: goalMet ? "#3a9e4f" : "#888", textTransform: "uppercase" }}>
+            {goalMet ? "✓ Goal met" : `${fmtMMSS(totalSec)} / ${fmtMMSS(goalSec)}`}
+          </span>
+        </div>
+        <div style={{ height: 3, background: "#1e1e1e", borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${goalPct}%`, background: goalMet ? "#3a9e4f" : proto.color, borderRadius: 3, transition: "width 0.4s ease" }} />
+        </div>
+      </div>
+
       {/* Orb */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 0 14px" }}>
         <div style={{ position: "relative", width: orb, height: orb, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -250,7 +289,7 @@ function BreathSession({ done, onComplete }) {
             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
           }}>
             <div style={{ fontSize: 13, letterSpacing: 3, textTransform: "uppercase", color: proto.color, fontWeight: 700 }}>
-              {running ? phaseName : (done ? "Done" : "Ready")}
+              {running ? phaseName : (goalMet ? "Done" : "Ready")}
             </div>
             {running && <div style={{ fontSize: 24, fontWeight: 700, color: "#e8e0d5", marginTop: 2 }}>{secLeft}</div>}
           </div>
@@ -258,9 +297,9 @@ function BreathSession({ done, onComplete }) {
         <div style={{ fontSize: 9, letterSpacing: 2, color: "#777", textTransform: "uppercase", marginTop: 14 }}>
           {running
             ? `Round ${round + 1} / ${rounds}`
-            : done
-              ? `✓ Logged · ${done.rounds} rounds ${BREATH_PROTOCOLS.find(p => p.key === done.protocol)?.label || done.protocol}`
-              : `${rounds} rounds · ${proto.phases.map(p => p[1]).join("-")}`}
+            : goalMet
+              ? `✓ ${fmtMMSS(bankedSec)} logged today`
+              : `${rounds} rounds · ~${fmtMMSS(sessionDur)}`}
         </div>
       </div>
 
@@ -269,9 +308,9 @@ function BreathSession({ done, onComplete }) {
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={() => setRounds(r => Math.max(2, r - 1))} style={{ ...g.ghost, padding: "9px 12px" }}>−</button>
           <span style={{ flex: 1, textAlign: "center", fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>{rounds} Rounds</span>
-          <button onClick={() => setRounds(r => Math.min(12, r + 1))} style={{ ...g.ghost, padding: "9px 12px" }}>+</button>
+          <button onClick={() => setRounds(r => Math.min(20, r + 1))} style={{ ...g.ghost, padding: "9px 12px" }}>+</button>
           <button onClick={start} style={{ ...g.ghost, background: proto.color, borderColor: proto.color, color: "#fff", padding: "9px 18px", flex: 2 }}>
-            {done ? "BREATHE AGAIN" : "BEGIN"}
+            {bankedSec > 0 ? "BREATHE MORE" : "BEGIN"}
           </button>
         </div>
       ) : (
@@ -623,7 +662,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         // Match the app's notion of a complete daily: some metric + stretches + breathing
         if (!(daily.crunches || daily.planks || daily.pushups)) missing.push("partial daily");
         if (!daily.stretches?.length) missing.push("no stretches");
-        if (!daily.breathing) missing.push("no breathing");
+        if (breathSecondsOf(daily) < BREATH_GOAL_SEC) missing.push("no breathing");
       }
       if (missing.length > 0) {
         items.push({ label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }), missing });
@@ -1593,6 +1632,13 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
 
   const stretchCount = Object.values(stretchDone).filter(Boolean).length;
 
+  // Breathing progress toward the 4-minute daily goal. Seed from any breathing
+  // already saved for the selected date so the bar reflects the day's total.
+  const breathDisplayDate = logDate ? new Date(logDate + "T12:00:00").toLocaleDateString() : new Date().toLocaleDateString();
+  const breathPriorSec = breathSecondsOf(dailyLog.find(d => d.date === breathDisplayDate));
+  const breathSec = breathPriorSec + (breath?.seconds || 0);
+  const breathMet = breathSec >= BREATH_GOAL_SEC;
+
   const saveDaily = async () => {
     const displayDate = logDate ? new Date(logDate + "T12:00:00").toLocaleDateString() : new Date().toLocaleDateString();
     const newStretches = STRETCHES.filter(s => stretchDone[s.key]).map(s => s.key);
@@ -1607,8 +1653,9 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
         pushups: daily.pushups || existing.pushups,
         steps: daily.steps || existing.steps,
         stretches: [...new Set([...(existing.stretches || []), ...newStretches])],
-        breathing: breath ? breath.rounds : existing.breathing,
+        breathing: breath ? (Number(existing.breathing) || 0) + breath.rounds : existing.breathing,
         breathProtocol: breath ? breath.protocol : existing.breathProtocol,
+        breathSeconds: breath ? breathSecondsOf(existing) + breath.seconds : existing.breathSeconds,
       };
       const newD = dailyLog.map(d => d.date === displayDate ? merged : d);
       setDailyLog(newD);
@@ -1619,6 +1666,7 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
         id: Date.now(), date: displayDate, ...daily, stretches: newStretches,
         breathing: breath ? breath.rounds : "",
         breathProtocol: breath ? breath.protocol : "",
+        breathSeconds: breath ? breath.seconds : "",
       };
       setDailyLog(prev => [entry, ...prev]);
       await saveEntry(entry);
@@ -1710,9 +1758,17 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
       {/* Breathing */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 22, marginBottom: 12 }}>
         <span style={g.label}>Breathing</span>
-        <span style={{ fontSize: 9, letterSpacing: 2, color: breath ? "#3a9e4f" : "#2a2a2a", textTransform: "uppercase", marginBottom: 12 }}>{breath ? "✓ done" : "0/1"}</span>
+        <span style={{ fontSize: 9, letterSpacing: 2, color: breathMet ? "#3a9e4f" : "#2a2a2a", textTransform: "uppercase", marginBottom: 12 }}>{breathMet ? "✓ 4:00" : `${fmtMMSS(breathSec)} / 4:00`}</span>
       </div>
-      <BreathSession done={breath} onComplete={(protocol, rounds) => setBreath({ protocol, rounds })} />
+      <BreathSession
+        bankedSec={breathSec}
+        goalSec={BREATH_GOAL_SEC}
+        onComplete={(protocol, rounds, seconds) => setBreath(prev => ({
+          protocol,
+          rounds: (prev?.rounds || 0) + rounds,
+          seconds: (prev?.seconds || 0) + seconds,
+        }))}
+      />
 
       <button style={g.primary} onClick={saveDaily}>{saved ? "✓  LOGGED" : "LOG DAILY ROUTINE"}</button>
 
@@ -1731,7 +1787,7 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
               </div>
               {d.steps && <div style={{ fontSize: 11, color: parseInt(d.steps) >= 10000 ? "#3a9e4f" : "#777", marginBottom: (d.stretches?.length || d.breathing) ? 7 : 0 }}>↳ {parseInt(d.steps).toLocaleString()} steps</div>}
               {d.stretches?.length > 0 && <div style={{ fontSize: 10, color: "#3a9e4f", marginBottom: d.breathing ? 7 : 0 }}>🧘 {d.stretches.join(", ")}</div>}
-              {d.breathing && <div style={{ fontSize: 10, color: "#5a8dd6" }}>◫ {d.breathing} rounds {BREATH_PROTOCOLS.find(p => p.key === d.breathProtocol)?.label || "breathing"}</div>}
+              {d.breathing && <div style={{ fontSize: 10, color: breathSecondsOf(d) >= BREATH_GOAL_SEC ? "#3a9e4f" : "#5a8dd6" }}>◫ {fmtMMSS(breathSecondsOf(d))} {BREATH_PROTOCOLS.find(p => p.key === d.breathProtocol)?.label || "breathing"} ({d.breathing}r)</div>}
             </div>
           ))}
         </>
@@ -2612,7 +2668,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                   {e.steps && <span>↳ {parseInt(e.steps).toLocaleString()} steps · </span>}
                   ✦ {e.crunches || 0} · ◆ {e.planks || 0} · ▲ {e.pushups || 0}
                   {e.stretches?.length > 0 && <span style={{ color: "#3a9e4f" }}> · 🧘 {e.stretches.join(", ")}</span>}
-                  {e.breathing && <span style={{ color: "#5a8dd6" }}> · ◫ {e.breathing}r {BREATH_PROTOCOLS.find(p => p.key === e.breathProtocol)?.label || "breath"}</span>}
+                  {e.breathing && <span style={{ color: breathSecondsOf(e) >= BREATH_GOAL_SEC ? "#3a9e4f" : "#5a8dd6" }}> · ◫ {fmtMMSS(breathSecondsOf(e))} {BREATH_PROTOCOLS.find(p => p.key === e.breathProtocol)?.label || "breath"}</span>}
                 </div>
               </div>
             );
@@ -2775,7 +2831,7 @@ export default function App() {
   });
   const needsDailyLog = !todayDaily || !(todayDaily.crunches || todayDaily.planks || todayDaily.pushups);
   const needsStretches = !todayDaily || !todayDaily.stretches?.length;
-  const needsBreathing = !todayDaily || !todayDaily.breathing;
+  const needsBreathing = breathSecondsOf(todayDaily) < BREATH_GOAL_SEC;
   const needsReminder = needsDailyLog || needsStretches || needsBreathing;
 
   const TABS = [
