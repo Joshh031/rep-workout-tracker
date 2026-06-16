@@ -398,22 +398,12 @@ ${text}
 Return only the JSON object.`
     };
     try {
-      if (!ANTHROPIC_KEY) throw new Error("Auto-fill is not configured (missing API key)");
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1500,
-          messages: [{ role: "user", content: prompts[tab] }]
-        })
+      const text = await anthropicParse({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1500,
+        messages: [{ role: "user", content: prompts[tab] }]
       });
-      const data = await res.json();
-      if (!res.ok || !data.content?.[0]?.text) {
-        throw new Error(data?.error?.message || `Request failed (${res.status})`);
-      }
-      const raw = data.content[0].text;
-      const clean = raw.replace(/```json|```/g, "").trim();
+      const clean = text.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
       onFill(parsed);
       setStatus("done");
@@ -434,25 +424,15 @@ Return only JSON, no explanation.`
       : `Extract any fitness or health data visible in this screenshot and return ONLY valid JSON.
 Return only JSON, no explanation.`;
     try {
-      if (!ANTHROPIC_KEY) throw new Error("Auto-fill is not configured (missing API key)");
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 500,
-          messages: [{ role: "user", content: [
-            { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
-            { type: "text", text: imagePrompt }
-          ]}]
-        })
+      const text = await anthropicParse({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 500,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
+          { type: "text", text: imagePrompt }
+        ]}]
       });
-      const data = await res.json();
-      if (!res.ok || !data.content?.[0]?.text) {
-        throw new Error(data?.error?.message || `Request failed (${res.status})`);
-      }
-      const raw = data.content[0].text;
-      const clean = raw.replace(/```json|```/g, "").trim();
+      const clean = text.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
       onFill(parsed);
       setStatus("done");
@@ -746,6 +726,16 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   const replaceWithAlt = (i, name) => { const u = [...exercises]; u[i].name = name; setExercises(u); setShowAlts(null); };
 
   const saveWorkout = async () => {
+    // Guard: don't save an empty strength workout (e.g. the default template
+    // with nothing logged), which is what produced past "0 sets" entries when
+    // auto-fill silently failed.
+    if (workoutType !== "run") {
+      const filledTotal = exercises.reduce((a, e) => a + e.sets.filter(s => s.reps || s.weight).length, 0);
+      if (filledTotal === 0) {
+        setSaveError("Nothing logged yet — fill in at least one set before saving.");
+        return;
+      }
+    }
     const displayDate = new Date(workoutDate + "T12:00:00").toLocaleDateString();
     const entry = { id: Date.now(), date: displayDate, type: workoutType, ...(workoutType === "run" ? { runData } : { exercises }) };
 
@@ -1418,14 +1408,10 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
     setRunParsing(true);
     setRunParseStatus("");
     try {
-      if (!ANTHROPIC_KEY) throw new Error("Auto-fill is not configured (missing API key)");
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 500,
-          messages: [{ role: "user", content: `Parse this run log and return ONLY valid JSON with these fields:
+      const text = await anthropicParse({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 500,
+        messages: [{ role: "user", content: `Parse this run log and return ONLY valid JSON with these fields:
 {
   "distance": number (total/final distance in miles),
   "duration": string (total/final time in mm:ss format),
@@ -1444,14 +1430,8 @@ Run log:
 ${runTextInput}
 
 Return only JSON, no explanation.` }]
-        })
       });
-      const data = await res.json();
-      if (!res.ok || !data.content?.[0]?.text) {
-        throw new Error(data?.error?.message || `Request failed (${res.status})`);
-      }
-      const raw = data.content[0].text;
-      const clean = raw.replace(/```json|```/g, "").trim();
+      const clean = text.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
       const filled = ["distance", "duration", "firstStop", "maxSpeed", "pace"]
         .some(k => parsed[k] !== undefined && parsed[k] !== null && parsed[k] !== "");
@@ -2759,6 +2739,33 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
 const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
+
+// Call the Anthropic messages API and return the model's text response.
+// Retries transient failures (network errors, rate limits, 5xx) with backoff,
+// and throws a clear error on a missing key or a non-retryable failure so the
+// caller can show an honest error instead of a false "filled" state.
+async function anthropicParse(body, retries = 2) {
+  if (!ANTHROPIC_KEY) throw new Error("Auto-fill is not configured (missing API key)");
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.content?.[0]?.text) return data.content[0].text;
+      lastErr = new Error(data?.error?.message || `Request failed (${res.status})`);
+      // Auth / bad-request errors won't succeed on retry — fail fast.
+      if ([400, 401, 403].includes(res.status)) break;
+    } catch (e) {
+      lastErr = e; // network/CORS error — retryable
+    }
+    if (attempt < retries) await new Promise(r => setTimeout(r, 600 * Math.pow(2, attempt)));
+  }
+  throw lastErr || new Error("Auto-fill failed");
+}
 
 async function sbFetch(table, method, body = null, match = null) {
   let url = `${SUPABASE_URL}/rest/v1/${table}`;
