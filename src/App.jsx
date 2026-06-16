@@ -398,6 +398,7 @@ ${text}
 Return only the JSON object.`
     };
     try {
+      if (!ANTHROPIC_KEY) throw new Error("Auto-fill is not configured (missing API key)");
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
@@ -408,7 +409,10 @@ Return only the JSON object.`
         })
       });
       const data = await res.json();
-      const raw = data.content?.[0]?.text || "{}";
+      if (!res.ok || !data.content?.[0]?.text) {
+        throw new Error(data?.error?.message || `Request failed (${res.status})`);
+      }
+      const raw = data.content[0].text;
       const clean = raw.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
       onFill(parsed);
@@ -430,6 +434,7 @@ Return only JSON, no explanation.`
       : `Extract any fitness or health data visible in this screenshot and return ONLY valid JSON.
 Return only JSON, no explanation.`;
     try {
+      if (!ANTHROPIC_KEY) throw new Error("Auto-fill is not configured (missing API key)");
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
@@ -443,7 +448,10 @@ Return only JSON, no explanation.`;
         })
       });
       const data = await res.json();
-      const raw = data.content?.[0]?.text || "{}";
+      if (!res.ok || !data.content?.[0]?.text) {
+        throw new Error(data?.error?.message || `Request failed (${res.status})`);
+      }
+      const raw = data.content[0].text;
       const clean = raw.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
       onFill(parsed);
@@ -634,6 +642,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   const [runData, setRunData] = useState({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "", location: "", feel: "", stopReason: "", notes: "" });
   const [showAlts, setShowAlts] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [draftId] = useState(() => "draft_" + Date.now());
   const [completionModal, setCompletionModal] = useState(null); // { todayVol, lastVol, lastDate, prs }
   const [postWorkoutDaily, setPostWorkoutDaily] = useState({ crunches: "", planks: "", pushups: "" });
@@ -785,14 +794,25 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
           const today = new Date().toLocaleDateString();
           const entry = { id: Date.now(), date: today, ...dailyData, stretches: Object.keys(stretches).filter(k => stretches[k]) };
           setDailyLog(prev => [entry, ...prev]);
-          await saveDailyEntry(entry);
+          try {
+            await saveDailyEntry(entry);
+          } catch (e) {
+            setDailyLog(prev => prev.filter(d => d.id !== entry.id)); // roll back on failure
+          }
         }
       });
     }
 
-    const newH = [entry, ...history];
-    setHistory(newH);
-    await saveEntry(entry);
+    const prevHistory = history;
+    setHistory([entry, ...history]);
+    try {
+      await saveEntry(entry);
+    } catch (e) {
+      setHistory(prevHistory); // roll back the optimistic update
+      setSaveError("Couldn't save — check your connection and try again.");
+      return;
+    }
+    setSaveError("");
     localStorage.removeItem("rep_draft");
     setSaved(true);
   };
@@ -1385,6 +1405,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         })()}
 
         <button style={g.primary} onClick={saveWorkout}>{saved ? "✓  SESSION SAVED" : "SAVE SESSION"}</button>
+        {saveError && <div style={{ fontSize: 10, color: "#c0392b", marginTop: -4, marginBottom: 10, textAlign: "center" }}>{saveError}</div>}
       </div>
     );
   }
@@ -1397,6 +1418,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
     setRunParsing(true);
     setRunParseStatus("");
     try {
+      if (!ANTHROPIC_KEY) throw new Error("Auto-fill is not configured (missing API key)");
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
@@ -1458,18 +1480,22 @@ Return only JSON, no explanation.` }]
     if (!distance || !duration) return "";
     const d = parseFloat(distance);
     if (!d) return "";
-    // Parse mm:ss or plain minutes
+    // Parse h:mm:ss, mm:ss, or plain minutes
     let totalMins = 0;
     if (String(duration).includes(":")) {
-      const [mins, secs] = duration.split(":").map(Number);
-      totalMins = (mins || 0) + (secs || 0) / 60;
+      const parts = duration.split(":").map(Number);
+      if (parts.length === 3) {
+        totalMins = (parts[0] || 0) * 60 + (parts[1] || 0) + (parts[2] || 0) / 60;
+      } else {
+        totalMins = (parts[0] || 0) + (parts[1] || 0) / 60;
+      }
     } else {
       totalMins = parseFloat(duration) || 0;
     }
     if (!totalMins) return "";
-    const paceDecimal = totalMins / d;
-    const paceMins = Math.floor(paceDecimal);
-    const paceSecs = Math.round((paceDecimal - paceMins) * 60);
+    const totalSecs = Math.round((totalMins / d) * 60);
+    const paceMins = Math.floor(totalSecs / 60);
+    const paceSecs = totalSecs % 60;
     return `${paceMins}:${String(paceSecs).padStart(2, "0")}`;
   };
 
@@ -1625,18 +1651,20 @@ Return only JSON, no explanation.` }]
       </div>
 
       <button style={g.primary} onClick={saveWorkout}>{saved ? "✓  RUN SAVED" : "SAVE RUN"}</button>
+      {saveError && <div style={{ fontSize: 10, color: "#c0392b", marginTop: -4, marginBottom: 10, textAlign: "center" }}>{saveError}</div>}
     </div>
   );
 }
 
 // ── DAILY TAB ──────────────────────────────────────────────────────────────
-function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
+function DailyTab({ dailyLog, setDailyLog, saveEntry, updateEntry, history, sleepLog }) {
   const todayStr = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD for input
   const [daily, setDaily] = useState({ crunches: "", planks: "", pushups: "", steps: "" });
   const [logDate, setLogDate] = useState(todayStr());
   const [stretchDone, setStretchDone] = useState({});
   const [breath, setBreath] = useState(null); // null | { protocol, rounds }
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const stretchCount = Object.values(stretchDone).filter(Boolean).length;
 
@@ -1650,11 +1678,13 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
   const saveDaily = async () => {
     const displayDate = logDate ? new Date(logDate + "T12:00:00").toLocaleDateString() : new Date().toLocaleDateString();
     const newStretches = STRETCHES.filter(s => stretchDone[s.key]).map(s => s.key);
+    const prevLog = dailyLog;
 
     // Check if entry already exists for this date — if so, merge
     const existing = dailyLog.find(d => d.date === displayDate);
+    let entry;
     if (existing) {
-      const merged = {
+      entry = {
         ...existing,
         crunches: daily.crunches || existing.crunches,
         planks: daily.planks || existing.planks,
@@ -1665,20 +1695,26 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
         breathProtocol: breath ? breath.protocol : existing.breathProtocol,
         breathSeconds: breath ? breathSecondsOf(existing) + breath.seconds : existing.breathSeconds,
       };
-      const newD = dailyLog.map(d => d.date === displayDate ? merged : d);
-      setDailyLog(newD);
-      // Delete old entry and save merged
-      await saveEntry(merged);
+      setDailyLog(dailyLog.map(d => d.date === displayDate ? entry : d));
     } else {
-      const entry = {
+      entry = {
         id: Date.now(), date: displayDate, ...daily, stretches: newStretches,
         breathing: breath ? breath.rounds : "",
         breathProtocol: breath ? breath.protocol : "",
         breathSeconds: breath ? breath.seconds : "",
       };
       setDailyLog(prev => [entry, ...prev]);
-      await saveEntry(entry);
     }
+    try {
+      // Update the existing row in place rather than inserting a duplicate.
+      if (existing) await updateEntry(entry);
+      else await saveEntry(entry);
+    } catch (e) {
+      setDailyLog(prevLog); // roll back the optimistic update
+      setSaveError("Couldn't save — check your connection and try again.");
+      return;
+    }
+    setSaveError("");
     setDaily({ crunches: "", planks: "", pushups: "", steps: "" });
     setLogDate(todayStr());
     setStretchDone({});
@@ -1779,6 +1815,7 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
       />
 
       <button style={g.primary} onClick={saveDaily}>{saved ? "✓  LOGGED" : "LOG DAILY ROUTINE"}</button>
+      {saveError && <div style={{ fontSize: 10, color: "#c0392b", marginTop: -4, marginBottom: 10, textAlign: "center" }}>{saveError}</div>}
 
       {/* Recent daily logs */}
       {dailyLog.length > 0 && (
@@ -1808,6 +1845,7 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, history, sleepLog }) {
 function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
   const [oura, setOura] = useState({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "" });
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [sleepDate, setSleepDate] = useState(() => new Date().toLocaleDateString("en-CA"));
 
   const sc = scoreColor(oura.sleepScore);
@@ -1821,9 +1859,16 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
   const saveSleep = async () => {
     const displayDate = new Date(sleepDate + "T12:00:00").toLocaleDateString();
     const entry = { id: Date.now(), date: displayDate, ...oura, jhSpread };
-    const newS = [entry, ...sleepLog];
-    setSleepLog(newS);
-    await saveEntry(entry);
+    const prevLog = sleepLog;
+    setSleepLog([entry, ...sleepLog]);
+    try {
+      await saveEntry(entry);
+    } catch (e) {
+      setSleepLog(prevLog); // roll back the optimistic update
+      setSaveError("Couldn't save — check your connection and try again.");
+      return;
+    }
+    setSaveError("");
     setOura({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "" });
     setSleepDate(new Date().toLocaleDateString("en-CA"));
     setSaved(true);
@@ -1926,6 +1971,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
           <button onClick={saveSleep} style={{ ...g.primary, marginBottom: 0, background: saved ? "#0b180b" : "#ff4d00", border: saved ? "1px solid #1a4020" : "none", color: saved ? "#3a9e4f" : "#fff", transition: "all 0.3s" }}>
             {saved ? "✓  SLEEP LOGGED" : "LOG SLEEP"}
           </button>
+          {saveError && <div style={{ fontSize: 10, color: "#c0392b", marginTop: 8, textAlign: "center" }}>{saveError}</div>}
         </div>
       </div>
 
@@ -2728,6 +2774,10 @@ async function sbFetch(table, method, body = null, match = null) {
     body: body ? JSON.stringify(body) : null,
   });
   if (method === "GET") return res.json();
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Supabase ${method} ${table} failed (${res.status}) ${detail}`);
+  }
   return res;
 }
 
@@ -2812,23 +2862,42 @@ export default function App() {
     await sbFetch("sleep_logs", "POST", { user_id: userId, data: entry });
   };
 
+  // Update an existing daily_logs row in place (matched by the id embedded in
+  // the JSON data), instead of inserting a duplicate. Used when merging into a
+  // day that's already been logged.
+  const updateDailyEntry = async (entry) => {
+    await sbFetch("daily_logs", "PATCH", { data: entry }, { user_id: `eq.${userId}`, "data->>id": `eq.${entry.id}` });
+  };
+
   const deleteWorkoutEntry = async (id) => {
-    const newH = history.filter(h => h.id !== id);
-    setHistory(newH);
-    // Delete by matching the id inside the data jsonb
-    await sbFetch("workouts", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
+    const prev = history;
+    setHistory(history.filter(h => h.id !== id));
+    try {
+      // Delete by matching the id inside the data jsonb
+      await sbFetch("workouts", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
+    } catch (e) {
+      setHistory(prev); // restore on failure so UI matches the database
+    }
   };
 
   const deleteDailyEntry = async (id) => {
-    const newD = dailyLog.filter(d => d.id !== id);
-    setDailyLog(newD);
-    await sbFetch("daily_logs", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
+    const prev = dailyLog;
+    setDailyLog(dailyLog.filter(d => d.id !== id));
+    try {
+      await sbFetch("daily_logs", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
+    } catch (e) {
+      setDailyLog(prev);
+    }
   };
 
   const deleteSleepEntry = async (id) => {
-    const newS = sleepLog.filter(s => s.id !== id);
-    setSleepLog(newS);
-    await sbFetch("sleep_logs", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
+    const prev = sleepLog;
+    setSleepLog(sleepLog.filter(s => s.id !== id));
+    try {
+      await sbFetch("sleep_logs", "DELETE", null, { user_id: `eq.${userId}`, "data->>id": `eq.${id}` });
+    } catch (e) {
+      setSleepLog(prev);
+    }
   };
 
   const todayDaily = dailyLog.find(d => {
@@ -2899,7 +2968,7 @@ export default function App() {
         ) : (
           <>
             {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} needsBreathing={needsBreathing} onGoToDaily={() => setTab("daily")} onGoToHistory={() => setTab("history")} />}
-            {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} history={history} sleepLog={sleepLog} />}
+            {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} updateEntry={updateDailyEntry} history={history} sleepLog={sleepLog} />}
             {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} history={history} dailyLog={dailyLog} />}
             {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
           </>
