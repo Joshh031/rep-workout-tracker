@@ -1425,9 +1425,17 @@ Return only JSON, no explanation.` }]
         })
       });
       const data = await res.json();
-      const raw = data.content?.[0]?.text || "{}";
+      if (!res.ok || !data.content?.[0]?.text) {
+        throw new Error(data?.error?.message || `Request failed (${res.status})`);
+      }
+      const raw = data.content[0].text;
       const clean = raw.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
+      const filled = ["distance", "duration", "firstStop", "maxSpeed", "pace"]
+        .some(k => parsed[k] !== undefined && parsed[k] !== null && parsed[k] !== "");
+      if (!filled) {
+        throw new Error("No run fields could be extracted from that log");
+      }
       setRunData(prev => ({
         ...prev,
         distance: parsed.distance ? String(parsed.distance) : prev.distance,
