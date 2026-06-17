@@ -399,8 +399,10 @@ Return only the JSON object.`
     };
     try {
       const text = await anthropicParse({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 1500,
+        thinking: { type: "disabled" },
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: prompts[tab] }]
       });
       const clean = text.replace(/```json|```/g, "").trim();
@@ -425,8 +427,10 @@ Return only JSON, no explanation.`
 Return only JSON, no explanation.`;
     try {
       const text = await anthropicParse({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 500,
+        thinking: { type: "disabled" },
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: [
           { type: "image", source: { type: "base64", media_type: mediaType, data: base64Data } },
           { type: "text", text: imagePrompt }
@@ -1409,8 +1413,10 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
     setRunParseStatus("");
     try {
       const text = await anthropicParse({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 500,
+        thinking: { type: "disabled" },
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: `Parse this run log and return ONLY valid JSON with these fields:
 {
   "distance": number (total/final distance in miles),
@@ -2372,7 +2378,7 @@ Keep it under 200 words. Be a tough but fair coach.`;
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 400, messages: [{ role: "user", content: prompt }] })
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 400, messages: [{ role: "user", content: prompt }] })
       });
       const data = await res.json();
       setAnalysis(data.content?.[0]?.text || "Unable to generate scorecard.");
@@ -2518,7 +2524,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-6",
           max_tokens: 1000,
           messages: [{ role: "user", content: prompt }]
         })
