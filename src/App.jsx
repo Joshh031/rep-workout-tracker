@@ -3,13 +3,20 @@ import { useState, useRef, useEffect, Fragment } from "react";
 // Normalize exercise names for fuzzy comparison.
 // "Iso-Lateral Shoulder Press", "iso lateral shoulder press", "Iso_lateral shoulder press!"
 // all collapse to the same key. Display data keeps original capitalization.
+// Simple plurals are folded too, so "shrug"/"shrugs" and "curl"/"curls" match.
 function normalizeName(name) {
   if (!name) return "";
   return name.toLowerCase()
     .replace(/[-_]/g, " ")
     .replace(/[^\w\s]/g, "")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    // Strip a single trailing "s" per word to fold plurals. Applied to both
+    // sides of every comparison, so consistency matters more than perfect
+    // singularization. Skip short words and "…ss" endings (e.g. "press").
+    .split(" ")
+    .map(w => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) ? w.slice(0, -1) : w)
+    .join(" ");
 }
 
 const EXERCISE_DB = {
