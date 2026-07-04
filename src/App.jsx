@@ -1,9 +1,14 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 
+// Irregular plurals / spelling variants a trailing-"s" strip can't catch.
+// Add a row here when two spellings of the same lift should compare equal.
+const NAME_VARIANTS = { flies: "fly", flyes: "fly", flys: "fly" };
+
 // Normalize exercise names for fuzzy comparison.
 // "Iso-Lateral Shoulder Press", "iso lateral shoulder press", "Iso_lateral shoulder press!"
 // all collapse to the same key. Display data keeps original capitalization.
-// Simple plurals are folded too, so "shrug"/"shrugs" and "curl"/"curls" match.
+// Also folds simple plurals ("shrug"/"shrugs"), the fly/flies family, and
+// spacing ("push up"/"pushup"/"push-up") so obvious duplicates match.
 function normalizeName(name) {
   if (!name) return "";
   return name.toLowerCase()
@@ -11,12 +16,14 @@ function normalizeName(name) {
     .replace(/[^\w\s]/g, "")
     .replace(/\s+/g, " ")
     .trim()
-    // Strip a single trailing "s" per word to fold plurals. Applied to both
-    // sides of every comparison, so consistency matters more than perfect
-    // singularization. Skip short words and "…ss" endings (e.g. "press").
     .split(" ")
+    // 1) map irregular variants (flies → fly) before the plural strip
+    .map(w => NAME_VARIANTS[w] || w)
+    // 2) strip a single trailing "s" per word to fold regular plurals; skip
+    //    short words ("abs") and "…ss" endings ("press")
     .map(w => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) ? w.slice(0, -1) : w)
-    .join(" ");
+    // 3) drop spacing so "push up" / "pushup" / "pull down" / "pulldown" match
+    .join("");
 }
 
 const EXERCISE_DB = {
