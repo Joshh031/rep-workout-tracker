@@ -1831,6 +1831,33 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [sleepDate, setSleepDate] = useState(() => new Date().toLocaleDateString("en-CA"));
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(""); // "" | "done" | error message
+
+  // One-tap sync from the Oura API via /api/oura (token lives server-side).
+  const syncOura = async () => {
+    setSyncing(true);
+    setSyncStatus("");
+    try {
+      const r = await fetch(`/api/oura?date=${sleepDate}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `Sync failed (${r.status})`);
+      setOura(o => ({
+        ...o,
+        sleepScore: d.sleepScore != null ? String(d.sleepScore) : o.sleepScore,
+        readiness: d.readiness != null ? String(d.readiness) : o.readiness,
+        hoursSlept: d.hoursSlept || o.hoursSlept,
+        rem: d.rem || o.rem,
+        heartRate: d.heartRate != null ? String(d.heartRate) : o.heartRate,
+        hrv: d.hrv != null ? String(d.hrv) : o.hrv,
+        respiratoryRate: d.respiratoryRate != null ? String(d.respiratoryRate) : o.respiratoryRate,
+      }));
+      setSyncStatus("done");
+    } catch (e) {
+      setSyncStatus(e.message || "Sync failed");
+    }
+    setSyncing(false);
+  };
 
   const sc = scoreColor(oura.sleepScore);
   const rc = scoreColor(oura.readiness);
@@ -1865,6 +1892,23 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
         <span style={g.label}>Oura Sleep</span>
         <input type="date" value={sleepDate} onChange={e => setSleepDate(e.target.value)}
           style={{ background: sleepDate !== new Date().toLocaleDateString("en-CA") ? "#1a0d00" : "#1c1c1c", border: `1px solid ${sleepDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#252525"}`, color: sleepDate !== new Date().toLocaleDateString("en-CA") ? "#ff4d00" : "#666", borderRadius: 5, padding: "4px 6px", fontSize: 10, fontFamily: "'DM Mono', monospace", cursor: "pointer" }} />
+      </div>
+
+      {/* One-tap Oura sync */}
+      <div style={{ ...g.card, padding: "12px 14px", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button onClick={syncOura} disabled={syncing}
+            style={{ ...g.primary, marginBottom: 0, flex: 1, padding: "12px 0", fontSize: 10, letterSpacing: 2, opacity: syncing ? 0.6 : 1 }}>
+            {syncing ? "⟳ SYNCING…" : "⟲ SYNC FROM OURA"}
+          </button>
+          {syncStatus === "done" && <span style={{ fontSize: 9, color: "#3a9e4f", letterSpacing: 1 }}>✓ FILLED</span>}
+        </div>
+        {syncStatus && syncStatus !== "done" && (
+          <div style={{ fontSize: 9, color: "#c0392b", marginTop: 8, lineHeight: 1.5 }}>✕ {syncStatus}</div>
+        )}
+        <div style={{ fontSize: 8, color: "#666", marginTop: 8, letterSpacing: 1 }}>
+          Pulls last night's scores automatically — review below, then log.
+        </div>
       </div>
 
       {/* Voice */}
