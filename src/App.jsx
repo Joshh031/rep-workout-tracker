@@ -638,8 +638,73 @@ function QuickFillBar({ onApply, vacationMode }) {
   );
 }
 
+// ── COMPLETION MODAL ───────────────────────────────────────────────────────
+// Post-workout overlay: per-exercise comparison vs last session, PRs, and a
+// quick crunches/stretches log before closing.
+function CompletionModal({ modal, postDaily, setPostDaily, postStretch, setPostStretch, onDone }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "24px 20px", width: "100%", maxWidth: 380, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ fontSize: 10, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase", marginBottom: 4 }}>✓ {modal.type} Complete</div>
+        {modal.exResults?.length > 0 && (
+          <div style={{ marginBottom: 16, marginTop: 16 }}>
+            {modal.exResults.map((r, idx) => {
+              const color = r.status === "weight" ? "#3a9e4f" : r.status === "reps" ? "#3a8fc4" : r.status === "tied" ? "#c49a1a" : r.status === "new" ? "#888" : "#c0392b";
+              const icon = r.status === "weight" ? "↑ WEIGHT PR" : r.status === "reps" ? "↑ MORE REPS" : r.status === "tied" ? "= MATCHED" : r.status === "new" ? "NEW" : "↓ BEHIND";
+              return (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: idx < modal.exResults.length - 1 ? "1px solid #1a1a1a" : "none" }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: "#ccc" }}>{r.name}</div>
+                    {r.lastMaxW > 0 && <div style={{ fontSize: 8, color: "#777", marginTop: 2 }}>{r.lastMaxR}×{r.lastMaxW} → {r.todayMaxR}×{r.todayMaxW}</div>}
+                  </div>
+                  <span style={{ fontSize: 7, fontWeight: 700, color, border: `1px solid ${color}`, borderRadius: 4, padding: "2px 6px", letterSpacing: 1 }}>{icon}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {modal.prs?.length > 0 && (
+          <div style={{ background: "#0a1a0a", border: "1px solid #1a4020", borderRadius: 8, padding: "10px 12px", marginBottom: 16 }}>
+            <div style={{ fontSize: 8, letterSpacing: 2, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 8 }}>🏆 New PRs This Session</div>
+            {modal.prs.map((pr, i) => (
+              <div key={i} style={{ fontSize: 10, color: "#ccc", marginBottom: 4 }}>
+                {pr.name} — <span style={{ color: "#3a9e4f", fontWeight: 700 }}>{pr.weight} lbs</span> <span style={{ color: "#777" }}>prev {pr.prev}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Post-workout crunches + stretches */}
+        <div style={{ background: "#181818", border: "1px solid #1a1a1a", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+          <div style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Log Crunches & Stretches</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+            {[["crunches","✦","Crunches"],["planks","◆","Planks"],["pushups","▲","Push-Ups"]].map(([f,icon,lbl]) => (
+              <div key={f} style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 12, marginBottom: 3 }}>{icon}</div>
+                <div style={{ fontSize: 7, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginBottom: 5 }}>{lbl}</div>
+                <input style={{ ...g.numInput, fontSize: 14 }} type="number" placeholder="0"
+                  value={postDaily[f]}
+                  onChange={e => setPostDaily(p => ({ ...p, [f]: e.target.value }))} />
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 8, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Stretches</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            {STRETCHES.map(s => (
+              <button key={s.key} onClick={() => setPostStretch(p => ({ ...p, [s.key]: !p[s.key] }))}
+                style={{ padding: "7px 8px", borderRadius: 6, border: `1px solid ${postStretch[s.key] ? "#1a4020" : "#1e1e1e"}`, background: postStretch[s.key] ? "#0b180b" : "#1c1c1c", color: postStretch[s.key] ? "#3a9e4f" : "#888", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
+                {postStretch[s.key] ? "✓ " : ""}{s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button onClick={onDone} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
+      </div>
+    </div>
+  );
+}
+
 // ── WORKOUT TAB ────────────────────────────────────────────────────────────
-function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, setDailyLog, saveDailyEntry, sleepLog, needsReminder, needsDailyLog, needsStretches, needsBreathing, onGoToDaily, onGoToHistory }) {
+function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, setDailyLog, saveDailyEntry, updateDailyEntry, sleepLog, needsReminder, needsDailyLog, needsStretches, needsBreathing, onGoToDaily, onGoToHistory }) {
   const [mode, setMode] = useState("pick"); // pick | preview | log
   const [workoutType, setWorkoutType] = useState(null);
   const [exercises, setExercises] = useState([]);
@@ -658,7 +723,10 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   const backlog = (() => {
     const workoutDates = new Set(history.map(h => h.date));
     const sleepDates = new Set(sleepLog.map(s => s.date));
-    const dailyByDate = new Map(dailyLog.map(d => [d.date, d]));
+    // Keep the first (newest) entry per date — legacy duplicate rows exist,
+    // and the Map constructor would keep the oldest instead.
+    const dailyByDate = new Map();
+    dailyLog.forEach(d => { if (!dailyByDate.has(d.date)) dailyByDate.set(d.date, d); });
     const items = [];
     const today = new Date();
     for (let i = 1; i <= 7; i++) {
@@ -806,12 +874,32 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         exResults, prs, type: workoutType, lastDate: lastSession?.date,
         saveDaily: async (dailyData, stretches) => {
           const today = new Date().toLocaleDateString();
-          const entry = { id: Date.now(), date: today, ...dailyData, stretches: Object.keys(stretches).filter(k => stretches[k]) };
-          setDailyLog(prev => [entry, ...prev]);
-          try {
-            await saveDailyEntry(entry);
-          } catch (e) {
-            setDailyLog(prev => prev.filter(d => d.id !== entry.id)); // roll back on failure
+          const newStretches = Object.keys(stretches).filter(k => stretches[k]);
+          const existing = dailyLog.find(d => d.date === today);
+          if (existing) {
+            // Merge into today's entry (PATCH) instead of inserting a
+            // duplicate daily row — mirrors DailyTab's merge behavior.
+            const merged = {
+              ...existing,
+              crunches: dailyData.crunches || existing.crunches,
+              planks: dailyData.planks || existing.planks,
+              pushups: dailyData.pushups || existing.pushups,
+              stretches: [...new Set([...(existing.stretches || []), ...newStretches])],
+            };
+            setDailyLog(prev => prev.map(d => d.id === existing.id ? merged : d));
+            try {
+              await updateDailyEntry(merged);
+            } catch (e) {
+              setDailyLog(prev => prev.map(d => d.id === existing.id ? existing : d)); // roll back
+            }
+          } else {
+            const entry = { id: Date.now(), date: today, ...dailyData, stretches: newStretches };
+            setDailyLog(prev => [entry, ...prev]);
+            try {
+              await saveDailyEntry(entry);
+            } catch (e) {
+              setDailyLog(prev => prev.filter(d => d.id !== entry.id)); // roll back on failure
+            }
           }
         }
       });
@@ -951,7 +1039,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
               <span style={{ fontSize: 13 }}>{ICON[h.type]} <span style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "#888", marginLeft: 6 }}>{h.type}</span></span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={g.badge}>{h.date}</span>
-                {h.exercises && <span style={{ fontSize: 10, color: "#888" }}>{h.exercises.reduce((a, e) => a + e.sets.length, 0)} sets</span>}
+                {h.exercises && <span style={{ fontSize: 10, color: "#888" }}>{h.exercises.reduce((a, e) => a + e.sets.filter(s => s.reps || s.weight).length, 0)} sets</span>}
                 {h.type === "run" && h.runData?.distance && <span style={{ fontSize: 10, color: "#888" }}>{h.runData.distance} mi</span>}
                 <button onClick={() => deleteWorkout(h.id)} style={{ background: "none", border: "1px solid #252525", color: "#888", padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono', monospace" }}>✕</button>
               </div>
@@ -1068,76 +1156,6 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
 
     return (
       <div style={g.page}>
-        {/* Completion modal overlay */}
-        {completionModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-            <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "24px 20px", width: "100%", maxWidth: 380 }}>
-              <div style={{ fontSize: 10, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase", marginBottom: 16 }}>✓ Session Complete</div>
-              {completionModal.exResults?.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  {completionModal.exResults.map((r, idx) => {
-                    const color = r.status === "weight" ? "#3a9e4f" : r.status === "reps" ? "#3a8fc4" : r.status === "tied" ? "#c49a1a" : r.status === "new" ? "#888" : "#c0392b";
-                    const icon = r.status === "weight" ? "↑ WEIGHT PR" : r.status === "reps" ? "↑ MORE REPS" : r.status === "tied" ? "= MATCHED" : r.status === "new" ? "NEW" : "↓ BEHIND";
-                    return (
-                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: idx < completionModal.exResults.length - 1 ? "1px solid #1a1a1a" : "none" }}>
-                        <div>
-                          <div style={{ fontSize: 10, color: "#ccc" }}>{r.name}</div>
-                          {r.lastMaxW > 0 && <div style={{ fontSize: 8, color: "#777", marginTop: 2 }}>{r.lastMaxR}×{r.lastMaxW} → {r.todayMaxR}×{r.todayMaxW}</div>}
-                        </div>
-                        <span style={{ fontSize: 7, fontWeight: 700, color, border: `1px solid ${color}`, borderRadius: 4, padding: "2px 6px", letterSpacing: 1 }}>{icon}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {completionModal.prs.length > 0 && (
-                <div style={{ background: "#0a1a0a", border: "1px solid #1a4020", borderRadius: 8, padding: "10px 12px", marginBottom: 16 }}>
-                  <div style={{ fontSize: 8, letterSpacing: 2, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 8 }}>🏆 New PRs</div>
-                  {completionModal.prs.map((pr, i) => (
-                    <div key={i} style={{ fontSize: 10, color: "#ccc", marginBottom: 4 }}>
-                      {pr.name} — <span style={{ color: "#3a9e4f", fontWeight: 700 }}>{pr.weight} lbs</span> <span style={{ color: "#777" }}>(prev {pr.prev})</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {/* Post-workout crunches + stretches */}
-              <div style={{ background: "#181818", border: "1px solid #1a1a1a", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
-                <div style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Log Crunches & Stretches</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
-                  {[["crunches","✦","Crunches"],["planks","◆","Planks"],["pushups","▲","Push-Ups"]].map(([f,icon,lbl]) => (
-                    <div key={f} style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 12, marginBottom: 3 }}>{icon}</div>
-                      <div style={{ fontSize: 7, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginBottom: 5 }}>{lbl}</div>
-                      <input style={{ ...g.numInput, fontSize: 14 }} type="number" placeholder="0"
-                        value={postWorkoutDaily[f]}
-                        onChange={e => setPostWorkoutDaily(p => ({ ...p, [f]: e.target.value }))} />
-                    </div>
-                  ))}
-                </div>
-                <div style={{ fontSize: 8, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Stretches</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                  {STRETCHES.map(s => (
-                    <button key={s.key} onClick={() => setPostStretch(p => ({ ...p, [s.key]: !p[s.key] }))}
-                      style={{ padding: "7px 8px", borderRadius: 6, border: `1px solid ${postStretch[s.key] ? "#1a4020" : "#1e1e1e"}`, background: postStretch[s.key] ? "#0b180b" : "#1c1c1c", color: postStretch[s.key] ? "#3a9e4f" : "#888", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
-                      {postStretch[s.key] ? "✓ " : ""}{s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <button onClick={() => {
-                const hasActivity = Object.values(postWorkoutDaily).some(v => v) || Object.values(postStretch).some(Boolean);
-                if (hasActivity && completionModal?.saveDaily) {
-                  completionModal.saveDaily(postWorkoutDaily, postStretch);
-                }
-                setPostWorkoutDaily({ crunches: "", planks: "", pushups: "" });
-                setPostStretch({});
-                setCompletionModal(null);
-                setMode("pick");
-              }} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
-            </div>
-          </div>
-        )}
-
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <button onClick={() => setMode("pick")} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11 }}>←</button>
           <span style={{ fontSize: 16 }}>{ICON[workoutType]}</span>
@@ -1208,75 +1226,26 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
       <div style={g.page}>
         {/* Completion modal */}
         {completionModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-            <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "24px 20px", width: "100%", maxWidth: 380 }}>
-              <div style={{ fontSize: 10, letterSpacing: 3, color: "#ff4d00", textTransform: "uppercase", marginBottom: 4 }}>✓ {completionModal.type} Complete</div>
-              {completionModal.exResults?.length > 0 && (
-                <div style={{ marginBottom: 16, marginTop: 16 }}>
-                  {completionModal.exResults.map((r, idx) => {
-                    const color = r.status === "weight" ? "#3a9e4f" : r.status === "reps" ? "#3a8fc4" : r.status === "tied" ? "#c49a1a" : r.status === "new" ? "#888" : "#c0392b";
-                    const icon = r.status === "weight" ? "↑ WEIGHT PR" : r.status === "reps" ? "↑ MORE REPS" : r.status === "tied" ? "= MATCHED" : r.status === "new" ? "NEW" : "↓ BEHIND";
-                    return (
-                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: idx < completionModal.exResults.length - 1 ? "1px solid #1a1a1a" : "none" }}>
-                        <div>
-                          <div style={{ fontSize: 10, color: "#ccc" }}>{r.name}</div>
-                          {r.lastMaxW > 0 && <div style={{ fontSize: 8, color: "#777", marginTop: 2 }}>{r.lastMaxR}×{r.lastMaxW} → {r.todayMaxR}×{r.todayMaxW}</div>}
-                        </div>
-                        <span style={{ fontSize: 7, fontWeight: 700, color, border: `1px solid ${color}`, borderRadius: 4, padding: "2px 6px", letterSpacing: 1 }}>{icon}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {completionModal.prs?.length > 0 && (
-                <div style={{ background: "#0a1a0a", border: "1px solid #1a4020", borderRadius: 8, padding: "10px 12px", marginBottom: 16 }}>
-                  <div style={{ fontSize: 8, letterSpacing: 2, color: "#3a9e4f", textTransform: "uppercase", marginBottom: 8 }}>🏆 New PRs This Session</div>
-                  {completionModal.prs.map((pr, i) => (
-                    <div key={i} style={{ fontSize: 10, color: "#ccc", marginBottom: 4 }}>
-                      {pr.name} — <span style={{ color: "#3a9e4f", fontWeight: 700 }}>{pr.weight} lbs</span> <span style={{ color: "#777" }}>prev {pr.prev}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {/* Post-workout crunches + stretches */}
-              <div style={{ background: "#181818", border: "1px solid #1a1a1a", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
-                <div style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Log Crunches & Stretches</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
-                  {[["crunches","✦","Crunches"],["planks","◆","Planks"],["pushups","▲","Push-Ups"]].map(([f,icon,lbl]) => (
-                    <div key={f} style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 12, marginBottom: 3 }}>{icon}</div>
-                      <div style={{ fontSize: 7, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginBottom: 5 }}>{lbl}</div>
-                      <input style={{ ...g.numInput, fontSize: 14 }} type="number" placeholder="0"
-                        value={postWorkoutDaily[f]}
-                        onChange={e => setPostWorkoutDaily(p => ({ ...p, [f]: e.target.value }))} />
-                    </div>
-                  ))}
-                </div>
-                <div style={{ fontSize: 8, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Stretches</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                  {STRETCHES.map(s => (
-                    <button key={s.key} onClick={() => setPostStretch(p => ({ ...p, [s.key]: !p[s.key] }))}
-                      style={{ padding: "7px 8px", borderRadius: 6, border: `1px solid ${postStretch[s.key] ? "#1a4020" : "#1e1e1e"}`, background: postStretch[s.key] ? "#0b180b" : "#1c1c1c", color: postStretch[s.key] ? "#3a9e4f" : "#888", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
-                      {postStretch[s.key] ? "✓ " : ""}{s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <button onClick={() => {
-                const hasActivity = Object.values(postWorkoutDaily).some(v => v) || Object.values(postStretch).some(Boolean);
-                if (hasActivity && completionModal?.saveDaily) {
-                  completionModal.saveDaily(postWorkoutDaily, postStretch);
-                }
-                setPostWorkoutDaily({ crunches: "", planks: "", pushups: "" });
-                setPostStretch({});
-                setCompletionModal(null);
-                setMode("pick");
-              }} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
-            </div>
-          </div>
+          <CompletionModal
+            modal={completionModal}
+            postDaily={postWorkoutDaily} setPostDaily={setPostWorkoutDaily}
+            postStretch={postStretch} setPostStretch={setPostStretch}
+            onDone={() => {
+              const hasActivity = Object.values(postWorkoutDaily).some(v => v) || Object.values(postStretch).some(Boolean);
+              if (hasActivity && completionModal?.saveDaily) {
+                completionModal.saveDaily(postWorkoutDaily, postStretch);
+              }
+              setPostWorkoutDaily({ crunches: "", planks: "", pushups: "" });
+              setPostStretch({});
+              setCompletionModal(null);
+              setMode("pick");
+            }}
+          />
         )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        {/* flexWrap lets the date/progress cluster drop to a second line on
+            narrow phones instead of overflowing the viewport horizontally */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, rowGap: 8, marginBottom: 20, flexWrap: "wrap" }}>
           <button onClick={() => setMode("pick")} style={{ ...g.ghost, padding: "6px 10px", fontSize: 11 }}>←</button>
           <span style={{ fontSize: 16 }}>{ICON[workoutType]}</span>
           <span style={{ fontSize: 11, letterSpacing: 3, textTransform: "uppercase", color: "#888" }}>{workoutType}</span>
@@ -1291,10 +1260,19 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
 
         <VoiceFill tab="workout" onFill={(parsed) => {
           if (parsed.exercises?.length) {
-            setExercises(parsed.exercises.map(e => ({
+            const incoming = parsed.exercises.map(e => ({
               name: e.name || "",
               sets: e.sets?.length ? e.sets.map(s => ({ reps: String(s.reps || ""), weight: String(s.weight || "") })) : [{ reps: "", weight: "" }]
-            })));
+            }));
+            // Merge instead of replace so manually-entered sets survive an
+            // auto-fill: parsed exercises win on a name match, exercises with
+            // logged sets are kept, and untouched template rows are dropped.
+            setExercises(prev => {
+              const incomingKeys = new Set(incoming.map(e => normalizeName(e.name)));
+              const keep = prev.filter(e =>
+                e.sets.some(s => s.reps || s.weight) && !incomingKeys.has(normalizeName(e.name)));
+              return [...keep, ...incoming];
+            });
           }
         }} />
 
@@ -2038,6 +2016,13 @@ function ConsistencyHeatmap({ history, dailyLog, sleepLog }) {
   const today = new Date();
   const activityMap = {};
 
+  // The grid spans 365 days; start scrolled to the right so the current
+  // weeks are visible instead of the empty year-ago end.
+  const gridRef = useRef(null);
+  useEffect(() => {
+    if (gridRef.current) gridRef.current.scrollLeft = gridRef.current.scrollWidth;
+  }, []);
+
   history.forEach(h => {
     if (h.date) {
       if (!activityMap[h.date]) activityMap[h.date] = { workout: false, daily: false, sleep: false, workoutType: null };
@@ -2131,13 +2116,13 @@ function ConsistencyHeatmap({ history, dailyLog, sleepLog }) {
         <div style={{ fontSize: 8, letterSpacing: 3, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>365-Day Consistency</div>
         <div style={{ display: "flex", gap: 2 }}>
           {/* Day labels */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginRight: 4, paddingTop: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, marginRight: 4, paddingTop: 12 }}>
             {dowLabels.map((d, i) => (
               <div key={i} style={{ fontSize: 7, color: "#666", height: 10, lineHeight: "10px", textAlign: "right" }}>{i % 2 === 0 ? d : ""}</div>
             ))}
           </div>
           {/* Week columns */}
-          <div style={{ display: "flex", gap: 2, overflowX: "auto" }}>
+          <div ref={gridRef} style={{ display: "flex", gap: 2, overflowX: "auto" }}>
             {weeks.filter(w => w.length > 0).map((week, wi) => (
               <div key={wi} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 {/* Month label on first day of month */}
@@ -2365,7 +2350,6 @@ function WeeklyScorecard({ history, sleepLog, dailyLog }) {
   const workoutDays = new Set(weekWorkouts.map(h => h.date)).size;
   const totalSets = weekWorkouts.reduce((a, h) => a + (h.exercises?.reduce((b, e) => b + e.sets.filter(s => s.reps || s.weight).length, 0) || 0), 0);
   const avgSleep = weekSleep.length ? (weekSleep.reduce((a, s) => a + (parseFloat(s.sleepScore) || 0), 0) / weekSleep.length).toFixed(0) : null;
-  const avgHrv = weekSleep.length ? (weekSleep.reduce((a, s) => a + (parseFloat(s.hrv) || 0), 0) / weekSleep.filter(s => s.hrv).length).toFixed(0) : null;
 
   const weekLabel = weekOffset === 0 ? "This Week" : weekOffset === -1 ? "Last Week" : `${mon.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 
@@ -2395,15 +2379,14 @@ Give a scorecard with:
 Keep it under 200 words. Be a tough but fair coach.`;
 
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 400, messages: [{ role: "user", content: prompt }] })
+      const text = await anthropicParse({
+        model: "claude-sonnet-4-6",
+        max_tokens: 400,
+        messages: [{ role: "user", content: prompt }]
       });
-      const data = await res.json();
-      setAnalysis(data.content?.[0]?.text || "Unable to generate scorecard.");
+      setAnalysis(text);
     } catch(e) {
-      setAnalysis("Error generating scorecard. Check your connection.");
+      setAnalysis("Couldn't generate the scorecard — check your connection and try again.");
     }
     setLoading(false);
   };
@@ -2488,7 +2471,9 @@ function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog,
     ...history.map(h => ({ ...h, _kind: "workout" })),
     ...dailyLog.map(d => ({ ...d, _kind: "daily" })),
     ...sleepLog.map(s => ({ ...s, _kind: "sleep" })),
-  ].sort((a, b) => b.id - a.id);
+    // Sort by the entry's date (newest first), not by id — id is the creation
+    // timestamp, which puts backdated entries out of order.
+  ].sort((a, b) => (new Date(b.date) - new Date(a.date)) || (b.id - a.id));
 
   const q = search.toLowerCase();
   const filtered = all.filter(e => {
@@ -2540,19 +2525,14 @@ Provide a sharp, specific analysis covering:
 Be direct, data-driven, specific. Use actual numbers from the data. Keep it under 350 words.`;
 
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1000,
-          messages: [{ role: "user", content: prompt }]
-        })
+      const text = await anthropicParse({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }]
       });
-      const data = await res.json();
-      setAnalysis(data.content?.[0]?.text || "Unable to generate analysis.");
+      setAnalysis(text);
     } catch (e) {
-      setAnalysis("Error connecting to analysis service. Please try again.");
+      setAnalysis("Couldn't generate the analysis — check your connection and try again.");
     }
     setLoading(false);
   };
@@ -3000,7 +2980,7 @@ export default function App() {
           </div>
         ) : (
           <>
-            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} needsBreathing={needsBreathing} onGoToDaily={() => setTab("daily")} onGoToHistory={() => setTab("history")} />}
+            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} updateDailyEntry={updateDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} needsBreathing={needsBreathing} onGoToDaily={() => setTab("daily")} onGoToHistory={() => setTab("history")} />}
             {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} updateEntry={updateDailyEntry} history={history} sleepLog={sleepLog} />}
             {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} history={history} dailyLog={dailyLog} />}
             {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
