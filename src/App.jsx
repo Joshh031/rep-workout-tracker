@@ -2,7 +2,13 @@ import { useState, useRef, useEffect, Fragment } from "react";
 
 // Irregular plurals / spelling variants a trailing-"s" strip can't catch.
 // Add a row here when two spellings of the same lift should compare equal.
-const NAME_VARIANTS = { flies: "fly", flyes: "fly", flys: "fly" };
+const NAME_VARIANTS = {
+  flies: "fly", flyes: "fly", flys: "fly",
+  // "-es" plurals the trailing-s strip would mangle ("crunches" → "crunche")
+  crunches: "crunch", benches: "bench", presses: "press", pushes: "push",
+  // irregular
+  calves: "calf",
+};
 
 // Normalize exercise names for fuzzy comparison.
 // "Iso-Lateral Shoulder Press", "iso lateral shoulder press", "Iso_lateral shoulder press!"
