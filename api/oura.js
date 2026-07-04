@@ -4,6 +4,7 @@
 //
 // GET /api/oura?date=YYYY-MM-DD               -> single night (date = wake day; defaults to today)
 // GET /api/oura?start=YYYY-MM-DD&end=YYYY-MM-DD -> { nights: [...] } for backfill
+// GET /api/oura?activity=YYYY-MM-DD           -> { day, steps } from daily_activity
 
 const OURA = "https://api.ouraring.com/v2/usercollection";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -67,6 +68,20 @@ export default async function handler(req, res) {
   };
 
   try {
+    // ── Activity mode (daily steps) ──
+    if (DATE_RE.test(req.query.activity || "")) {
+      const day = req.query.activity;
+      const startD = new Date(day + "T12:00:00Z");
+      startD.setUTCDate(startD.getUTCDate() - 1);
+      const acts = await getAll("daily_activity", startD.toISOString().slice(0, 10), day);
+      const rec = acts.filter(a => a.day <= day).pop();
+      if (!rec) {
+        return res.status(404).json({ error: `No Oura activity data for ${day} yet` });
+      }
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ day: rec.day, steps: rec.steps ?? null });
+    }
+
     // ── Range mode (backfill) ──
     if (DATE_RE.test(req.query.start || "")) {
       const start = req.query.start;
