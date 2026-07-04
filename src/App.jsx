@@ -733,18 +733,17 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       const dateStr = d.toLocaleDateString();
+      // Itemized so the card says exactly what's missing, not just "no daily"
       const missing = [];
-      if (!workoutDates.has(dateStr)) missing.push("no workout");
-      if (!sleepDates.has(dateStr)) missing.push("no sleep");
+      if (!workoutDates.has(dateStr)) missing.push("workout");
+      if (!sleepDates.has(dateStr)) missing.push("sleep");
       const daily = dailyByDate.get(dateStr);
-      if (!daily) {
-        missing.push("no daily");
-      } else {
-        // Match the app's notion of a complete daily: some metric + stretches + breathing
-        if (!(daily.crunches || daily.planks || daily.pushups)) missing.push("partial daily");
-        if (!daily.stretches?.length) missing.push("no stretches");
-        if (breathSecondsOf(daily) < BREATH_GOAL_SEC) missing.push("no breathing");
-      }
+      if (!daily?.steps) missing.push("steps");
+      if (!daily?.crunches) missing.push("crunches");
+      if (!daily?.planks) missing.push("planks");
+      if (!daily?.pushups) missing.push("push-ups");
+      if (!daily?.stretches?.length) missing.push("stretches");
+      if (breathSecondsOf(daily) < BREATH_GOAL_SEC) missing.push("breathing");
       if (missing.length > 0) {
         items.push({ label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }), missing });
       }
@@ -985,8 +984,8 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         <div style={{ background: "#1a0d00", border: "1px solid #3a1a00", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
           <div style={{ fontSize: 9, letterSpacing: 2, color: "#ff4d00", textTransform: "uppercase", marginBottom: 8 }}>◉ Backlog · {backlog.length} day{backlog.length === 1 ? "" : "s"} incomplete</div>
           {backlog.slice(0, 5).map((item, i) => (
-            <div key={i} style={{ fontSize: 10, color: "#888", marginBottom: 4 }}>
-              {item.label} — {item.missing.join(", ")}
+            <div key={i} style={{ fontSize: 10, color: "#888", marginBottom: 4, lineHeight: 1.5 }}>
+              <span style={{ color: "#aaa" }}>{item.label}</span> — missing {item.missing.join(" · ")}
             </div>
           ))}
           {backlog.length > 5 && (
@@ -1710,6 +1709,26 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, updateEntry, history, slee
   const steps = parseInt(daily.steps) || 0;
   const stepPct = Math.min((steps / 10000) * 100, 100);
 
+  const [stepsSyncing, setStepsSyncing] = useState(false);
+  const [stepsSyncMsg, setStepsSyncMsg] = useState("");
+
+  // Pull the selected day's step count from Oura (daily_activity).
+  const syncSteps = async () => {
+    setStepsSyncing(true);
+    setStepsSyncMsg("");
+    try {
+      const r = await fetch(`/api/oura?activity=${logDate || todayStr()}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `Sync failed (${r.status})`);
+      if (d.steps == null) throw new Error("Oura returned no step count");
+      setDaily(prev => ({ ...prev, steps: String(d.steps) }));
+      setStepsSyncMsg("done");
+    } catch (e) {
+      setStepsSyncMsg(e.message || "Sync failed");
+    }
+    setStepsSyncing(false);
+  };
+
   return (
     <div style={g.page}>
       {/* Date picker */}
@@ -1751,7 +1770,16 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, updateEntry, history, slee
             {steps >= 10000 ? "✓ 10K REACHED" : `${(10000 - steps).toLocaleString()} to go`}
           </span>
         </div>
-        <input style={{ ...g.numInput, fontSize: 20, fontWeight: 700, marginBottom: 10 }} type="number" placeholder="0" value={daily.steps} onChange={e => setDaily({ ...daily, steps: e.target.value })} />
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <input style={{ ...g.numInput, fontSize: 20, fontWeight: 700 }} type="number" placeholder="0" value={daily.steps} onChange={e => setDaily({ ...daily, steps: e.target.value })} />
+          <button onClick={syncSteps} disabled={stepsSyncing}
+            style={{ ...g.ghost, padding: "0 12px", fontSize: 8, whiteSpace: "nowrap", color: stepsSyncMsg === "done" ? "#3a9e4f" : "#888", borderColor: stepsSyncMsg === "done" ? "#1a4020" : "#252525", opacity: stepsSyncing ? 0.6 : 1 }}>
+            {stepsSyncing ? "⟳" : stepsSyncMsg === "done" ? "✓ OURA" : "⟲ OURA"}
+          </button>
+        </div>
+        {stepsSyncMsg && stepsSyncMsg !== "done" && (
+          <div style={{ fontSize: 9, color: "#c0392b", marginBottom: 8 }}>✕ {stepsSyncMsg}</div>
+        )}
         <div style={{ height: 3, background: "#1e1e1e", borderRadius: 3, overflow: "hidden" }}>
           <div style={{ height: "100%", width: `${stepPct}%`, background: steps >= 10000 ? "#3a9e4f" : "#ff4d00", borderRadius: 3, transition: "width 0.4s ease" }} />
         </div>
