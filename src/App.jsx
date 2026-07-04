@@ -1826,7 +1826,7 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, updateEntry, history, slee
 }
 
 // ── SLEEP TAB ──────────────────────────────────────────────────────────────
-function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
+function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, history, dailyLog }) {
   const [oura, setOura] = useState({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "" });
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -1857,6 +1857,53 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
       setSyncStatus(e.message || "Sync failed");
     }
     setSyncing(false);
+  };
+
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState("");
+
+  // Pull the last 90 days from Oura, skip dates already logged, bulk-save the rest.
+  const backfillOura = async () => {
+    setBackfilling(true);
+    setBackfillMsg("");
+    try {
+      const endD = new Date();
+      const startD = new Date();
+      startD.setDate(startD.getDate() - 90);
+      const r = await fetch(`/api/oura?start=${startD.toLocaleDateString("en-CA")}&end=${endD.toLocaleDateString("en-CA")}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `Backfill failed (${r.status})`);
+
+      const have = new Set(sleepLog.map(s => s.date));
+      const str = (v) => v != null ? String(v) : "";
+      const base = Date.now();
+      const entries = (d.nights || [])
+        .map((n, i) => {
+          const jh = (n.hrv != null && n.heartRate != null) ? (n.hrv - n.heartRate).toFixed(1) : null;
+          return {
+            id: base + i,
+            date: new Date(n.day + "T12:00:00").toLocaleDateString(),
+            sleepScore: str(n.sleepScore), readiness: str(n.readiness),
+            hoursSlept: n.hoursSlept || "", rem: n.rem || "",
+            heartRate: str(n.heartRate), hrv: str(n.hrv),
+            respiratoryRate: str(n.respiratoryRate), jhSpread: jh,
+          };
+        })
+        .filter(e => !have.has(e.date));
+
+      if (!entries.length) {
+        setBackfillMsg("✓ Nothing to add — every night in range is already logged");
+      } else {
+        await saveEntries(entries); // save first; only update the UI on success
+        setSleepLog(prev => [...entries, ...prev]
+          .sort((a, b) => (new Date(b.date) - new Date(a.date)) || (b.id - a.id)));
+        const skipped = (d.nights || []).length - entries.length;
+        setBackfillMsg(`✓ Added ${entries.length} night${entries.length === 1 ? "" : "s"}${skipped ? ` · ${skipped} already logged` : ""}`);
+      }
+    } catch (e) {
+      setBackfillMsg(`✕ ${e.message || "Backfill failed"}`);
+    }
+    setBackfilling(false);
   };
 
   const sc = scoreColor(oura.sleepScore);
@@ -1908,6 +1955,15 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, history, dailyLog }) {
         )}
         <div style={{ fontSize: 8, color: "#666", marginTop: 8, letterSpacing: 1 }}>
           Pulls last night's scores automatically — review below, then log.
+        </div>
+        <div style={{ borderTop: "1px solid #1e1e1e", marginTop: 10, paddingTop: 10 }}>
+          <button onClick={backfillOura} disabled={backfilling}
+            style={{ ...g.ghost, width: "100%", padding: "9px 0", fontSize: 9, opacity: backfilling ? 0.6 : 1 }}>
+            {backfilling ? "⟳ BACKFILLING…" : "⇣ BACKFILL LAST 90 DAYS"}
+          </button>
+          {backfillMsg && (
+            <div style={{ fontSize: 9, color: backfillMsg.startsWith("✓") ? "#3a9e4f" : "#c0392b", marginTop: 8, lineHeight: 1.5 }}>{backfillMsg}</div>
+          )}
         </div>
       </div>
 
@@ -2919,6 +2975,11 @@ export default function App() {
     await sbFetch("sleep_logs", "POST", { user_id: userId, data: entry });
   };
 
+  // Bulk insert (Oura backfill) — PostgREST accepts an array body
+  const saveSleepEntries = async (entries) => {
+    await sbFetch("sleep_logs", "POST", entries.map(e => ({ user_id: userId, data: e })));
+  };
+
   // Update an existing daily_logs row in place (matched by the id embedded in
   // the JSON data), instead of inserting a duplicate. Used when merging into a
   // day that's already been logged.
@@ -3026,7 +3087,7 @@ export default function App() {
           <>
             {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} updateDailyEntry={updateDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} needsBreathing={needsBreathing} onGoToDaily={() => setTab("daily")} onGoToHistory={() => setTab("history")} />}
             {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} updateEntry={updateDailyEntry} history={history} sleepLog={sleepLog} />}
-            {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} history={history} dailyLog={dailyLog} />}
+            {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} saveEntries={saveSleepEntries} history={history} dailyLog={dailyLog} />}
             {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
           </>
         )}
