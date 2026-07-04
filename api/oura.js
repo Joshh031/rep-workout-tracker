@@ -5,6 +5,7 @@
 // GET /api/oura?date=YYYY-MM-DD               -> single night (date = wake day; defaults to today)
 // GET /api/oura?start=YYYY-MM-DD&end=YYYY-MM-DD -> { nights: [...] } for backfill
 // GET /api/oura?activity=YYYY-MM-DD           -> { day, steps } from daily_activity
+// GET /api/oura?activity_start=YYYY-MM-DD&activity_end=YYYY-MM-DD -> { days: [{day, steps}] }
 
 const OURA = "https://api.ouraring.com/v2/usercollection";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -68,6 +69,20 @@ export default async function handler(req, res) {
   };
 
   try {
+    // ── Activity range mode (steps backfill) ──
+    if (DATE_RE.test(req.query.activity_start || "")) {
+      const start = req.query.activity_start;
+      const end = DATE_RE.test(req.query.activity_end || "") ? req.query.activity_end : new Date().toISOString().slice(0, 10);
+      if ((new Date(end) - new Date(start)) / 86400000 > 370) {
+        return res.status(400).json({ error: "Range too large — max 370 days" });
+      }
+      const acts = await getAll("daily_activity", start, end);
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({
+        days: acts.filter(a => a.steps != null).map(a => ({ day: a.day, steps: a.steps })),
+      });
+    }
+
     // ── Activity mode (daily steps) ──
     if (DATE_RE.test(req.query.activity || "")) {
       const day = req.query.activity;

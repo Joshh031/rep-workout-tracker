@@ -1640,7 +1640,7 @@ Return only JSON, no explanation.` }]
 }
 
 // ── DAILY TAB ──────────────────────────────────────────────────────────────
-function DailyTab({ dailyLog, setDailyLog, saveEntry, updateEntry, history, sleepLog }) {
+function DailyTab({ dailyLog, setDailyLog, saveEntry, saveEntries, updateEntry, history, sleepLog }) {
   const todayStr = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD for input
   const [daily, setDaily] = useState({ crunches: "", planks: "", pushups: "", steps: "" });
   const [logDate, setLogDate] = useState(todayStr());
@@ -1729,6 +1729,60 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, updateEntry, history, slee
     setStepsSyncing(false);
   };
 
+  const [stepsBackfilling, setStepsBackfilling] = useState(false);
+  const [stepsBackfillMsg, setStepsBackfillMsg] = useState("");
+
+  // Pull 90 days of step counts from Oura. Days with no daily entry get a new
+  // steps-only entry; days whose entry lacks steps get merged (PATCH); days
+  // that already have steps are left alone. Safe to re-run.
+  const backfillSteps = async () => {
+    setStepsBackfilling(true);
+    setStepsBackfillMsg("");
+    try {
+      const endD = new Date();
+      const startD = new Date();
+      startD.setDate(startD.getDate() - 90);
+      const r = await fetch(`/api/oura?activity_start=${startD.toLocaleDateString("en-CA")}&activity_end=${endD.toLocaleDateString("en-CA")}`);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `Backfill failed (${r.status})`);
+
+      // Newest entry per date (log is newest-first)
+      const byDate = new Map();
+      dailyLog.forEach(e => { if (!byDate.has(e.date)) byDate.set(e.date, e); });
+
+      const base = Date.now();
+      const toCreate = [], toUpdate = [];
+      (d.days || []).forEach((day, i) => {
+        const displayDate = new Date(day.day + "T12:00:00").toLocaleDateString();
+        const existing = byDate.get(displayDate);
+        if (!existing) {
+          toCreate.push({ id: base + i, date: displayDate, crunches: "", planks: "", pushups: "", steps: String(day.steps), stretches: [], breathing: "", breathProtocol: "", breathSeconds: "" });
+        } else if (!existing.steps) {
+          toUpdate.push({ ...existing, steps: String(day.steps) });
+        }
+      });
+
+      if (!toCreate.length && !toUpdate.length) {
+        setStepsBackfillMsg("✓ Nothing to add — every day in range already has steps");
+      } else {
+        if (toCreate.length) await saveEntries(toCreate);
+        await Promise.all(toUpdate.map(u => updateEntry(u)));
+        setDailyLog(prev => {
+          const updatedIds = new Map(toUpdate.map(u => [u.id, u]));
+          return [...toCreate, ...prev.map(e => updatedIds.get(e.id) || e)]
+            .sort((a, b) => (new Date(b.date) - new Date(a.date)) || (b.id - a.id));
+        });
+        const parts = [];
+        if (toCreate.length) parts.push(`${toCreate.length} day${toCreate.length === 1 ? "" : "s"} added`);
+        if (toUpdate.length) parts.push(`${toUpdate.length} filled in`);
+        setStepsBackfillMsg(`✓ ${parts.join(" · ")}`);
+      }
+    } catch (e) {
+      setStepsBackfillMsg(`✕ ${e.message || "Backfill failed"}`);
+    }
+    setStepsBackfilling(false);
+  };
+
   return (
     <div style={g.page}>
       {/* Date picker */}
@@ -1782,6 +1836,15 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, updateEntry, history, slee
         )}
         <div style={{ height: 3, background: "#1e1e1e", borderRadius: 3, overflow: "hidden" }}>
           <div style={{ height: "100%", width: `${stepPct}%`, background: steps >= 10000 ? "#3a9e4f" : "#ff4d00", borderRadius: 3, transition: "width 0.4s ease" }} />
+        </div>
+        <div style={{ borderTop: "1px solid #1e1e1e", marginTop: 10, paddingTop: 10 }}>
+          <button onClick={backfillSteps} disabled={stepsBackfilling}
+            style={{ ...g.ghost, width: "100%", padding: "9px 0", fontSize: 9, opacity: stepsBackfilling ? 0.6 : 1 }}>
+            {stepsBackfilling ? "⟳ BACKFILLING…" : "⇣ BACKFILL STEPS · LAST 90 DAYS"}
+          </button>
+          {stepsBackfillMsg && (
+            <div style={{ fontSize: 9, color: stepsBackfillMsg.startsWith("✓") ? "#3a9e4f" : "#c0392b", marginTop: 8, lineHeight: 1.5 }}>{stepsBackfillMsg}</div>
+          )}
         </div>
       </div>
 
@@ -3015,6 +3078,11 @@ export default function App() {
     await sbFetch("daily_logs", "PATCH", { data: entry }, { user_id: `eq.${userId}`, "data->>id": `eq.${entry.id}` });
   };
 
+  // Bulk insert (Oura steps backfill)
+  const saveDailyEntries = async (entries) => {
+    await sbFetch("daily_logs", "POST", entries.map(e => ({ user_id: userId, data: e })));
+  };
+
   const deleteWorkoutEntry = async (id) => {
     const prev = history;
     setHistory(history.filter(h => h.id !== id));
@@ -3114,7 +3182,7 @@ export default function App() {
         ) : (
           <>
             {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} updateDailyEntry={updateDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} needsBreathing={needsBreathing} onGoToDaily={() => setTab("daily")} onGoToHistory={() => setTab("history")} />}
-            {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} updateEntry={updateDailyEntry} history={history} sleepLog={sleepLog} />}
+            {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} saveEntries={saveDailyEntries} updateEntry={updateDailyEntry} history={history} sleepLog={sleepLog} />}
             {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} saveEntries={saveSleepEntries} history={history} dailyLog={dailyLog} />}
             {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
           </>
