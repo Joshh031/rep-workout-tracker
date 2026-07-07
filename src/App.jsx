@@ -1717,7 +1717,7 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, saveEntries, updateEntry, 
     setStepsSyncing(true);
     setStepsSyncMsg("");
     try {
-      const r = await fetch(`/api/oura?activity=${logDate || todayStr()}`);
+      const r = await apiFetch(`/api/oura?activity=${logDate || todayStr()}`);
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `Sync failed (${r.status})`);
       if (d.steps == null) throw new Error("Oura returned no step count");
@@ -1742,7 +1742,7 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, saveEntries, updateEntry, 
       const endD = new Date();
       const startD = new Date();
       startD.setDate(startD.getDate() - 90);
-      const r = await fetch(`/api/oura?activity_start=${startD.toLocaleDateString("en-CA")}&activity_end=${endD.toLocaleDateString("en-CA")}`);
+      const r = await apiFetch(`/api/oura?activity_start=${startD.toLocaleDateString("en-CA")}&activity_end=${endD.toLocaleDateString("en-CA")}`);
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `Backfill failed (${r.status})`);
 
@@ -1930,7 +1930,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, history, dail
     setSyncing(true);
     setSyncStatus("");
     try {
-      const r = await fetch(`/api/oura?date=${sleepDate}`);
+      const r = await apiFetch(`/api/oura?date=${sleepDate}`);
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `Sync failed (${r.status})`);
       setOura(o => ({
@@ -1961,7 +1961,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, history, dail
       const endD = new Date();
       const startD = new Date();
       startD.setDate(startD.getDate() - 90);
-      const r = await fetch(`/api/oura?start=${startD.toLocaleDateString("en-CA")}&end=${endD.toLocaleDateString("en-CA")}`);
+      const r = await apiFetch(`/api/oura?start=${startD.toLocaleDateString("en-CA")}&end=${endD.toLocaleDateString("en-CA")}`);
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `Backfill failed (${r.status})`);
 
@@ -2932,32 +2932,44 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
   );
 }
 
-// ── SUPABASE CLIENT ────────────────────────────────────────────────────────
-const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
+// ── API CLIENT ──────────────────────────────────────────────────────────────
+// Every data, AI, and Oura call goes through the /api/* serverless functions;
+// the browser holds no database or API keys. The passphrase (matching the
+// APP_SECRET env var in Vercel) is stored locally and sent on each request.
+// A 401 clears it and locks the app until the passphrase is re-entered.
 
-// Call the Anthropic messages API and return the model's text response.
+function getSecret() { return localStorage.getItem("rep_secret") || ""; }
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", "x-app-secret": getSecret(), ...(opts.headers || {}) },
+  });
+  if (res.status === 401) {
+    localStorage.removeItem("rep_secret");
+    window.dispatchEvent(new Event("rep-locked"));
+    throw new Error("Locked — enter your passphrase");
+  }
+  return res;
+}
+
+// Call Claude via /api/claude and return the model's text response.
 // Retries transient failures (network errors, rate limits, 5xx) with backoff,
-// and throws a clear error on a missing key or a non-retryable failure so the
-// caller can show an honest error instead of a false "filled" state.
+// and throws a clear error on a non-retryable failure so the caller can show
+// an honest error instead of a false "filled" state.
 async function anthropicParse(body, retries = 2) {
-  if (!ANTHROPIC_KEY) throw new Error("Auto-fill is not configured (missing API key)");
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify(body),
-      });
+      const res = await apiFetch("/api/claude", { method: "POST", body: JSON.stringify(body) });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.content?.[0]?.text) return data.content[0].text;
-      lastErr = new Error(data?.error?.message || `Request failed (${res.status})`);
-      // Auth / bad-request errors won't succeed on retry — fail fast.
-      if ([400, 401, 403].includes(res.status)) break;
+      lastErr = new Error(data?.error?.message || (typeof data?.error === "string" ? data.error : `Request failed (${res.status})`));
+      // Bad-request / permission errors won't succeed on retry — fail fast.
+      if ([400, 403, 405].includes(res.status)) break;
     } catch (e) {
-      lastErr = e; // network/CORS error — retryable
+      lastErr = e;
+      if (String(e.message).startsWith("Locked")) break; // needs the passphrase, not a retry
     }
     if (attempt < retries) await new Promise(r => setTimeout(r, 600 * Math.pow(2, attempt)));
   }
@@ -2965,24 +2977,45 @@ async function anthropicParse(body, retries = 2) {
 }
 
 async function sbFetch(table, method, body = null, match = null) {
-  let url = `${SUPABASE_URL}/rest/v1/${table}`;
-  if (match) url += `?${new URLSearchParams(match)}`;
-  const res = await fetch(url, {
+  const qs = new URLSearchParams({ table, ...(match || {}) });
+  const res = await apiFetch(`/api/data?${qs}`, {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${SUPABASE_KEY}`,
-      "Prefer": method === "POST" ? "return=representation" : "return=minimal",
-    },
-    body: body ? JSON.stringify(body) : null,
+    body: body ? JSON.stringify(body) : undefined,
   });
-  if (method === "GET") return res.json();
+  if (method === "GET") {
+    if (!res.ok) throw new Error(`Load ${table} failed (${res.status})`);
+    return res.json();
+  }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`Supabase ${method} ${table} failed (${res.status}) ${detail}`);
+    throw new Error(`Save ${table} failed (${res.status}) ${detail}`);
   }
   return res;
+}
+
+// ── LOCK SCREEN ─────────────────────────────────────────────────────────────
+// Shown until the passphrase matching Vercel's APP_SECRET is entered once;
+// it's stored locally, so this is a one-time step per device.
+function LockScreen({ onUnlock }) {
+  const [value, setValue] = useState("");
+  return (
+    <div style={{ minHeight: "100vh", background: "#141414", color: "#e8e0d5", fontFamily: "'DM Mono', monospace", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+      <div style={{ fontSize: 26, fontWeight: 700, color: "#ff4d00", letterSpacing: 6, marginBottom: 8 }}>REP</div>
+      <div style={{ fontSize: 9, letterSpacing: 3, color: "#888", textTransform: "uppercase", marginBottom: 28 }}>Enter passphrase</div>
+      <form style={{ width: "100%", maxWidth: 320 }} onSubmit={e => { e.preventDefault(); if (value.trim()) onUnlock(value.trim()); }}>
+        <input
+          type="password" autoFocus value={value} onChange={e => setValue(e.target.value)}
+          placeholder="••••••••"
+          style={{ ...g.input, fontSize: 16, textAlign: "center", marginBottom: 12, padding: "14px 12px" }}
+        />
+        <button type="submit" style={{ ...g.primary, opacity: value.trim() ? 1 : 0.4 }}>UNLOCK</button>
+      </form>
+      <div style={{ fontSize: 8, color: "#666", letterSpacing: 1, marginTop: 16, textAlign: "center", lineHeight: 1.8 }}>
+        One-time per device · this is the APP_SECRET<br />set in Vercel environment variables
+      </div>
+    </div>
+  );
 }
 
 // Generate or retrieve a stable user ID stored in localStorage
@@ -3005,8 +3038,18 @@ export default function App() {
   const [dailyLog, setDailyLog] = useState([]);
   const [sleepLog, setSleepLog] = useState([]);
 
+  // Locked until the stored passphrase exists; any 401 re-locks (apiFetch
+  // clears the stored secret and fires this event).
+  const [locked, setLocked] = useState(() => !getSecret());
+  useEffect(() => {
+    const onLock = () => setLocked(true);
+    window.addEventListener("rep-locked", onLock);
+    return () => window.removeEventListener("rep-locked", onLock);
+  }, []);
+
   // Load all data from Supabase on mount
   useEffect(() => {
+    if (!getSecret()) { setLoading(false); return; }
     async function loadData() {
       try {
         let uid = userId;
@@ -3131,6 +3174,14 @@ export default function App() {
     { key: "sleep",   label: "SLEEP",   flex: 1 },
     { key: "history", label: "HISTORY", flex: 1 },
   ];
+
+  if (locked) {
+    return <LockScreen onUnlock={(secret) => {
+      localStorage.setItem("rep_secret", secret);
+      // Reload so the initial data load runs with the passphrase in place
+      window.location.reload();
+    }} />;
+  }
 
   return (
     <>
