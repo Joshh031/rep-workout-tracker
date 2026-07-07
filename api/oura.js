@@ -7,6 +7,8 @@
 // GET /api/oura?activity=YYYY-MM-DD           -> { day, steps } from daily_activity
 // GET /api/oura?activity_start=YYYY-MM-DD&activity_end=YYYY-MM-DD -> { days: [{day, steps}] }
 
+import { checkAuth } from "./_auth.js";
+
 const OURA = "https://api.ouraring.com/v2/usercollection";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -31,6 +33,7 @@ const mapNight = (day, ds, dr, period) => ({
 });
 
 export default async function handler(req, res) {
+  if (!checkAuth(req, res)) return;
   const token = process.env.OURA_TOKEN;
   if (!token) {
     return res.status(500).json({ error: "OURA_TOKEN is not configured in Vercel environment variables" });
