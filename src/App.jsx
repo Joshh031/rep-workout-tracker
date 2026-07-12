@@ -1,36 +1,5 @@
 import { useState, useRef, useEffect, Fragment } from "react";
-
-// Irregular plurals / spelling variants a trailing-"s" strip can't catch.
-// Add a row here when two spellings of the same lift should compare equal.
-const NAME_VARIANTS = {
-  flies: "fly", flyes: "fly", flys: "fly",
-  // "-es" plurals the trailing-s strip would mangle ("crunches" → "crunche")
-  crunches: "crunch", benches: "bench", presses: "press", pushes: "push",
-  // irregular
-  calves: "calf",
-};
-
-// Normalize exercise names for fuzzy comparison.
-// "Iso-Lateral Shoulder Press", "iso lateral shoulder press", "Iso_lateral shoulder press!"
-// all collapse to the same key. Display data keeps original capitalization.
-// Also folds simple plurals ("shrug"/"shrugs"), the fly/flies family, and
-// spacing ("push up"/"pushup"/"push-up") so obvious duplicates match.
-function normalizeName(name) {
-  if (!name) return "";
-  return name.toLowerCase()
-    .replace(/[-_]/g, " ")
-    .replace(/[^\w\s]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    // 1) map irregular variants (flies → fly) before the plural strip
-    .map(w => NAME_VARIANTS[w] || w)
-    // 2) strip a single trailing "s" per word to fold regular plurals; skip
-    //    short words ("abs") and "…ss" endings ("press")
-    .map(w => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) ? w.slice(0, -1) : w)
-    // 3) drop spacing so "push up" / "pushup" / "pull down" / "pulldown" match
-    .join("");
-}
+import { normalizeName, findLastMatch, compareSets } from "./compare.js";
 
 const EXERCISE_DB = {
   chest:     { staples: ["Bench Press", "Incline Bench", "Cable Fly", "Dumbbell Press", "Push-Up"], alternatives: ["Decline Bench", "Pec Deck", "Landmine Press", "Dips", "Cable Crossover", "Chest Pullover", "Floor Press", "Svend Press"] },
@@ -120,6 +89,16 @@ const g = {
   ghost:    { background: "none", border: "1px solid #252525", color: "#666", padding: "7px 12px", borderRadius: 5, cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, textTransform: "uppercase" },
   altBtn:   { background: "#191919", border: "1px solid #252525", color: "#bbb", padding: "9px 12px", borderRadius: 5, cursor: "pointer", fontSize: 11, fontFamily: "'DM Mono', monospace", display: "block", width: "100%", textAlign: "left", marginBottom: 6 },
   badge:    { background: "#1e1e1e", color: "#888", fontSize: 9, letterSpacing: 2, textTransform: "uppercase", padding: "3px 8px", borderRadius: 3, border: "1px solid #252525" },
+};
+
+// Badge styling per comparison status (see compareSets in compare.js)
+const CMP_STYLE = {
+  weight: { color: "#3a9e4f", label: "↑ WEIGHT PR" },
+  reps:   { color: "#3a8fc4", label: "↑ MORE REPS" },
+  volume: { color: "#3a8fc4", label: "↑ VOLUME" },
+  tied:   { color: "#c49a1a", label: "= MATCHED" },
+  behind: { color: "#c0392b", label: "↓ BEHIND" },
+  new:    { color: "#888",    label: "NEW" },
 };
 
 const Bar = ({ value, max, color = "#ff4d00" }) => (
@@ -410,7 +389,8 @@ Return only JSON, no explanation.`,
 Format: {"exercises": [{"name": string, "sets": [{"reps": number, "weight": number}]}]}
 For a line like "4x8x315" create 4 sets each with reps=8 weight=315.
 For "1x8x225" create 1 set with reps=8 weight=225.
-Group sets under the exercise name that appears above them.
+A line may hold several groups separated by ";" or ",": "Belt Squat 2x8x225; 3x8x315" means 2 sets of reps=8 weight=225 followed by 3 sets of reps=8 weight=315, all under Belt Squat.
+Group sets under the exercise name on the same line, or the nearest name above them.
 
 Workout log:
 ${text}
@@ -649,8 +629,7 @@ function CompletionModal({ modal, postDaily, setPostDaily, postStretch, setPostS
         {modal.exResults?.length > 0 && (
           <div style={{ marginBottom: 16, marginTop: 16 }}>
             {modal.exResults.map((r, idx) => {
-              const color = r.status === "weight" ? "#3a9e4f" : r.status === "reps" ? "#3a8fc4" : r.status === "tied" ? "#c49a1a" : r.status === "new" ? "#888" : "#c0392b";
-              const icon = r.status === "weight" ? "↑ WEIGHT PR" : r.status === "reps" ? "↑ MORE REPS" : r.status === "tied" ? "= MATCHED" : r.status === "new" ? "NEW" : "↓ BEHIND";
+              const { color, label: icon } = CMP_STYLE[r.status] || CMP_STYLE.new;
               return (
                 <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: idx < modal.exResults.length - 1 ? "1px solid #1a1a1a" : "none" }}>
                   <div>
@@ -834,22 +813,18 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
     if (workoutType !== "run" && exercises.length) {
       const lastSession = getLastSession(workoutType);
 
-      // Per-exercise comparison
+      // Per-exercise comparison. findLastMatch pairs renamed exercises
+      // ("Hamstring curl" ↔ "Hamstring leg curl"); the shared claimed set
+      // keeps two of today's exercises from matching the same previous one.
+      const claimed = new Set();
       const exResults = exercises.map(ex => {
         if (!ex.name) return null;
         const filledSets = ex.sets.filter(s => s.reps || s.weight);
         if (!filledSets.length) return null;
-        const lastEx = (lastSession?.exercises || []).find(e => normalizeName(e.name) === normalizeName(ex.name));
+        const lastEx = findLastMatch(ex.name, lastSession?.exercises || [], claimed);
         const lastFilled = lastEx?.sets.filter(s => s.reps || s.weight) || [];
-        const todayMaxW = filledSets.length ? Math.max(...filledSets.map(s => parseFloat(s.weight)||0)) : 0;
-        const lastMaxW = lastFilled.length ? Math.max(...lastFilled.map(s => parseFloat(s.weight)||0)) : 0;
-        const todayMaxR = filledSets.length ? Math.max(...filledSets.map(s => parseFloat(s.reps)||0)) : 0;
-        const lastMaxR = lastFilled.length ? Math.max(...lastFilled.map(s => parseFloat(s.reps)||0)) : 0;
-        const beatWeight = todayMaxW > lastMaxW && lastMaxW > 0;
-        const beatReps = todayMaxR > lastMaxR && lastMaxR > 0;
-        const tied = todayMaxW === lastMaxW && lastMaxW > 0;
-        const status = beatWeight ? "weight" : beatReps ? "reps" : tied ? "tied" : lastFilled.length ? "behind" : "new";
-        return { name: ex.name, todayMaxW, lastMaxW, todayMaxR, lastMaxR, status, sets: filledSets.length };
+        const cmp = compareSets(filledSets, lastFilled);
+        return { name: ex.name, ...cmp, sets: filledSets.length };
       }).filter(Boolean);
 
       // PRs — exercises beating all-time max
@@ -927,11 +902,10 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   // Find last time each exercise was performed
   const getLastPerformance = (exName) => {
     if (!exName) return null;
-    const name = normalizeName(exName);
-    if (!name) return null;
+    if (!normalizeName(exName)) return null;
     for (const session of history) {
       if (!session.exercises) continue;
-      const match = session.exercises.find(e => normalizeName(e.name) === name);
+      const match = findLastMatch(exName, session.exercises);
       if (match && match.sets?.length) {
         // Find best set (highest weight with reps)
         const filledSets = match.sets.filter(s => s.reps || s.weight);
@@ -1353,22 +1327,16 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         {(() => {
           const lastSession = getLastSession(workoutType);
           if (!lastSession) return null;
+          const claimed = new Set();
           const results = exercises.map(ex => {
             if (!ex.name) return null;
             const filledSets = ex.sets.filter(s => s.reps || s.weight);
             if (!filledSets.length) return null;
-            const lastEx = (lastSession.exercises || []).find(e => normalizeName(e.name) === normalizeName(ex.name));
+            const lastEx = findLastMatch(ex.name, lastSession.exercises || [], claimed);
             if (!lastEx) return null;
             const lastFilled = lastEx.sets.filter(s => s.reps || s.weight);
-            const todayMaxW = filledSets.length ? Math.max(...filledSets.map(s => parseFloat(s.weight)||0)) : 0;
-            const lastMaxW = lastFilled.length ? Math.max(...lastFilled.map(s => parseFloat(s.weight)||0)) : 0;
-            const todayMaxR = filledSets.length ? Math.max(...filledSets.map(s => parseFloat(s.reps)||0)) : 0;
-            const lastMaxR = lastFilled.length ? Math.max(...lastFilled.map(s => parseFloat(s.reps)||0)) : 0;
-            const beatWeight = todayMaxW > lastMaxW;
-            const tiedWeight = todayMaxW === lastMaxW && todayMaxW > 0;
-            const beatReps = todayMaxR > lastMaxR;
-            const status = beatWeight ? "weight" : beatReps ? "reps" : tiedWeight ? "tied" : "behind";
-            return { name: ex.name, todayMaxW, lastMaxW, todayMaxR, lastMaxR, status };
+            const cmp = compareSets(filledSets, lastFilled);
+            return { name: ex.name, ...cmp };
           }).filter(Boolean);
 
           if (!results.length) return null;
@@ -1377,8 +1345,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
             <div style={{ ...g.card, padding: "12px 14px", marginBottom: 10 }}>
               <div style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Exercise Progress vs Last Session</div>
               {results.map((r, idx) => {
-                const color = r.status === "weight" ? "#3a9e4f" : r.status === "reps" ? "#3a8fc4" : r.status === "tied" ? "#c49a1a" : "#c0392b";
-                const icon = r.status === "weight" ? "↑ PR" : r.status === "reps" ? "↑ REPS" : r.status === "tied" ? "= MATCHED" : "↓ BEHIND";
+                const { color, label: icon } = CMP_STYLE[r.status] || CMP_STYLE.new;
                 return (
                   <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 7, marginBottom: 7, borderBottom: idx < results.length - 1 ? "1px solid #1c1c1c" : "none" }}>
                     <div>
