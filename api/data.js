@@ -11,6 +11,7 @@
 // direct anon-key access.
 
 import { checkAuth } from "./_auth.js";
+import { supabaseConfig, supabaseHeaders } from "./_supabase.js";
 
 const TABLES = new Set(["workouts", "daily_logs", "sleep_logs"]);
 // Only these PostgREST query params may pass through
@@ -20,8 +21,7 @@ const METHODS = new Set(["GET", "POST", "PATCH", "DELETE"]);
 export default async function handler(req, res) {
   if (!checkAuth(req, res)) return;
 
-  const base = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_KEY;
+  const { url: base, key } = supabaseConfig();
   if (!base || !key) {
     return res.status(500).json({ error: "Supabase env vars not configured" });
   }
@@ -43,9 +43,7 @@ export default async function handler(req, res) {
   const r = await fetch(target, {
     method: req.method,
     headers: {
-      "Content-Type": "application/json",
-      apikey: key,
-      Authorization: `Bearer ${key}`,
+      ...supabaseHeaders(key),
       Prefer: req.method === "POST" ? "return=representation" : "return=minimal",
     },
     body: req.method === "POST" || req.method === "PATCH" ? JSON.stringify(req.body) : undefined,
