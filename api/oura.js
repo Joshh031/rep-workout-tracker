@@ -72,6 +72,35 @@ export default async function handler(req, res) {
   };
 
   try {
+    // ── Debug mode: show Oura's raw day-tagging for a range ──
+    // /api/oura?debug=1&start=YYYY-MM-DD&end=YYYY-MM-DD&s=<passphrase>
+    if (req.query.debug) {
+      const end = DATE_RE.test(req.query.end || "") ? req.query.end : new Date().toISOString().slice(0, 10);
+      let start = req.query.start;
+      if (!DATE_RE.test(start || "")) {
+        const s = new Date(end + "T12:00:00Z");
+        s.setUTCDate(s.getUTCDate() - 7);
+        start = s.toISOString().slice(0, 10);
+      }
+      const [ds, dr, sp] = await Promise.all([
+        getAll("daily_sleep", start, end),
+        getAll("daily_readiness", start, end),
+        getAll("sleep", start, end),
+      ]);
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({
+        range: { start, end },
+        daily_sleep: ds.map(d => ({ day: d.day, score: d.score })),
+        daily_readiness: dr.map(d => ({ day: d.day, score: d.score })),
+        sleep_periods: sp.map(p => ({
+          day: p.day, type: p.type,
+          bedtime_start: p.bedtime_start, bedtime_end: p.bedtime_end,
+          hours: hmm(p.total_sleep_duration), rem: hmm(p.rem_sleep_duration),
+          lowest_hr: p.lowest_heart_rate ?? null, avg_hrv: p.average_hrv ?? null,
+        })),
+      });
+    }
+
     // ── Activity range mode (steps backfill) ──
     if (DATE_RE.test(req.query.activity_start || "")) {
       const start = req.query.activity_start;
