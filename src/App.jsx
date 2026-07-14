@@ -1884,13 +1884,13 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, saveEntries, updateEntry, 
 }
 
 // ── SLEEP TAB ──────────────────────────────────────────────────────────────
-function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, history, dailyLog }) {
+function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, history, dailyLog }) {
   const [oura, setOura] = useState({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "" });
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [sleepDate, setSleepDate] = useState(() => new Date().toLocaleDateString("en-CA"));
   const [syncing, setSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState(""); // "" | "done" | error message
+  const [syncStatus, setSyncStatus] = useState(""); // "" | "done" | "partial" | error message
 
   // One-tap sync from the Oura API via /api/oura (token lives server-side).
   const syncOura = async () => {
@@ -1910,7 +1910,11 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, history, dail
         hrv: d.hrv != null ? String(d.hrv) : o.hrv,
         respiratoryRate: d.respiratoryRate != null ? String(d.respiratoryRate) : o.respiratoryRate,
       }));
-      setSyncStatus("done");
+      // Early-morning syncs often get the scores before the ring has uploaded
+      // the detailed session (hours/REM/HR/HRV). Flag it instead of claiming done.
+      const gotScores = d.sleepScore != null || d.readiness != null;
+      const gotDetail = !!(d.hoursSlept || d.hrv != null || d.heartRate != null);
+      setSyncStatus(gotScores && !gotDetail ? "partial" : "done");
     } catch (e) {
       setSyncStatus(e.message || "Sync failed");
     }
@@ -1932,31 +1936,57 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, history, dail
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `Backfill failed (${r.status})`);
 
-      const have = new Set(sleepLog.map(s => s.date));
+      // Newest entry per date (log is newest-first)
+      const byDate = new Map();
+      sleepLog.forEach(s => { if (!byDate.has(s.date)) byDate.set(s.date, s); });
       const str = (v) => v != null ? String(v) : "";
+      const FIELDS = ["sleepScore", "readiness", "hoursSlept", "rem", "heartRate", "hrv", "respiratoryRate"];
       const base = Date.now();
-      const entries = (d.nights || [])
-        .map((n, i) => {
-          const jh = (n.hrv != null && n.heartRate != null) ? (n.hrv - n.heartRate).toFixed(1) : null;
-          return {
-            id: base + i,
-            date: new Date(n.day + "T12:00:00").toLocaleDateString(),
-            sleepScore: str(n.sleepScore), readiness: str(n.readiness),
-            hoursSlept: n.hoursSlept || "", rem: n.rem || "",
-            heartRate: str(n.heartRate), hrv: str(n.hrv),
-            respiratoryRate: str(n.respiratoryRate), jhSpread: jh,
-          };
-        })
-        .filter(e => !have.has(e.date));
 
-      if (!entries.length) {
-        setBackfillMsg("✓ Nothing to add — every night in range is already logged");
+      const toCreate = [], toRepair = [];
+      (d.nights || []).forEach((n, i) => {
+        const fresh = {
+          sleepScore: str(n.sleepScore), readiness: str(n.readiness),
+          hoursSlept: n.hoursSlept || "", rem: n.rem || "",
+          heartRate: str(n.heartRate), hrv: str(n.hrv),
+          respiratoryRate: str(n.respiratoryRate),
+        };
+        const displayDate = new Date(n.day + "T12:00:00").toLocaleDateString();
+        const existing = byDate.get(displayDate);
+        if (!existing) {
+          const jh = (n.hrv != null && n.heartRate != null) ? (n.hrv - n.heartRate).toFixed(1) : null;
+          toCreate.push({ id: base + i, date: displayDate, ...fresh, jhSpread: jh });
+        } else {
+          // Repair pass: fill only the blanks of a partial entry (e.g. a
+          // morning sync that got scores before the ring uploaded details)
+          const merged = { ...existing };
+          let changed = false;
+          for (const k of FIELDS) {
+            if (!existing[k] && fresh[k]) { merged[k] = fresh[k]; changed = true; }
+          }
+          if (changed) {
+            merged.jhSpread = (merged.hrv && merged.heartRate)
+              ? (parseFloat(merged.hrv) - parseFloat(merged.heartRate)).toFixed(1)
+              : merged.jhSpread ?? null;
+            toRepair.push(merged);
+          }
+        }
+      });
+
+      if (!toCreate.length && !toRepair.length) {
+        setBackfillMsg("✓ Nothing to do — every night in range is complete");
       } else {
-        await saveEntries(entries); // save first; only update the UI on success
-        setSleepLog(prev => [...entries, ...prev]
-          .sort((a, b) => (new Date(b.date) - new Date(a.date)) || (b.id - a.id)));
-        const skipped = (d.nights || []).length - entries.length;
-        setBackfillMsg(`✓ Added ${entries.length} night${entries.length === 1 ? "" : "s"}${skipped ? ` · ${skipped} already logged` : ""}`);
+        if (toCreate.length) await saveEntries(toCreate); // save first; UI updates on success
+        await Promise.all(toRepair.map(u => updateEntry(u)));
+        setSleepLog(prev => {
+          const repaired = new Map(toRepair.map(u => [u.id, u]));
+          return [...toCreate, ...prev.map(s => repaired.get(s.id) || s)]
+            .sort((a, b) => (new Date(b.date) - new Date(a.date)) || (b.id - a.id));
+        });
+        const parts = [];
+        if (toCreate.length) parts.push(`${toCreate.length} night${toCreate.length === 1 ? "" : "s"} added`);
+        if (toRepair.length) parts.push(`${toRepair.length} repaired`);
+        setBackfillMsg(`✓ ${parts.join(" · ")}`);
       }
     } catch (e) {
       setBackfillMsg(`✕ ${e.message || "Backfill failed"}`);
@@ -1974,11 +2004,28 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, history, dail
 
   const saveSleep = async () => {
     const displayDate = new Date(sleepDate + "T12:00:00").toLocaleDateString();
-    const entry = { id: Date.now(), date: displayDate, ...oura, jhSpread };
     const prevLog = sleepLog;
-    setSleepLog([entry, ...sleepLog]);
+    // Merge into an existing entry for the same date (re-sync after a partial
+    // morning sync) instead of creating a duplicate. Form values win when
+    // filled; blanks keep what was already saved.
+    const existing = sleepLog.find(s => s.date === displayDate);
+    let entry;
+    if (existing) {
+      entry = { ...existing };
+      for (const k of ["sleepScore", "readiness", "hoursSlept", "rem", "heartRate", "hrv", "respiratoryRate"]) {
+        if (oura[k]) entry[k] = oura[k];
+      }
+      entry.jhSpread = (entry.hrv && entry.heartRate)
+        ? (parseFloat(entry.hrv) - parseFloat(entry.heartRate)).toFixed(1)
+        : entry.jhSpread ?? null;
+      setSleepLog(prev => prev.map(s => s.id === existing.id ? entry : s));
+    } else {
+      entry = { id: Date.now(), date: displayDate, ...oura, jhSpread };
+      setSleepLog([entry, ...sleepLog]);
+    }
     try {
-      await saveEntry(entry);
+      if (existing) await updateEntry(entry);
+      else await saveEntry(entry);
     } catch (e) {
       setSleepLog(prevLog); // roll back the optimistic update
       setSaveError("Couldn't save — check your connection and try again.");
@@ -2007,8 +2054,14 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, history, dail
             {syncing ? "⟳ SYNCING…" : "⟲ SYNC FROM OURA"}
           </button>
           {syncStatus === "done" && <span style={{ fontSize: 9, color: "#3a9e4f", letterSpacing: 1 }}>✓ FILLED</span>}
+          {syncStatus === "partial" && <span style={{ fontSize: 9, color: "#c49a1a", letterSpacing: 1 }}>⚠ SCORES ONLY</span>}
         </div>
-        {syncStatus && syncStatus !== "done" && (
+        {syncStatus === "partial" && (
+          <div style={{ fontSize: 9, color: "#c49a1a", marginTop: 8, lineHeight: 1.5 }}>
+            ⚠ Oura hasn't finished uploading last night's details yet. Sync again in a few minutes — logging twice is safe, it updates the same day.
+          </div>
+        )}
+        {syncStatus && syncStatus !== "done" && syncStatus !== "partial" && (
           <div style={{ fontSize: 9, color: "#c0392b", marginTop: 8, lineHeight: 1.5 }}>✕ {syncStatus}</div>
         )}
         <div style={{ fontSize: 8, color: "#666", marginTop: 8, letterSpacing: 1 }}>
@@ -3081,6 +3134,11 @@ export default function App() {
     await sbFetch("sleep_logs", "POST", entries.map(e => ({ user_id: userId, data: e })));
   };
 
+  // Update an existing sleep row in place (merge on re-sync / repair)
+  const updateSleepEntry = async (entry) => {
+    await sbFetch("sleep_logs", "PATCH", { data: entry }, { user_id: `eq.${userId}`, "data->>id": `eq.${entry.id}` });
+  };
+
   // Update an existing daily_logs row in place (matched by the id embedded in
   // the JSON data), instead of inserting a duplicate. Used when merging into a
   // day that's already been logged.
@@ -3201,7 +3259,7 @@ export default function App() {
           <>
             {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} updateDailyEntry={updateDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} needsBreathing={needsBreathing} onGoToDaily={() => setTab("daily")} onGoToHistory={() => setTab("history")} />}
             {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} saveEntries={saveDailyEntries} updateEntry={updateDailyEntry} history={history} sleepLog={sleepLog} />}
-            {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} saveEntries={saveSleepEntries} history={history} dailyLog={dailyLog} />}
+            {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} saveEntries={saveSleepEntries} updateEntry={updateSleepEntry} history={history} dailyLog={dailyLog} />}
             {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
           </>
         )}
