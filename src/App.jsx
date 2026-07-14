@@ -1910,11 +1910,21 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
         hrv: d.hrv != null ? String(d.hrv) : o.hrv,
         respiratoryRate: d.respiratoryRate != null ? String(d.respiratoryRate) : o.respiratoryRate,
       }));
-      // Early-morning syncs often get the scores before the ring has uploaded
-      // the detailed session (hours/REM/HR/HRV). Flag it instead of claiming done.
-      const gotScores = d.sleepScore != null || d.readiness != null;
-      const gotDetail = !!(d.hoursSlept || d.hrv != null || d.heartRate != null);
-      setSyncStatus(gotScores && !gotDetail ? "partial" : "done");
+      // Oura tells us which wake-day this night actually belongs to. If it
+      // isn't the selected date (early sync before last night is processed,
+      // Oura serves the previous night), move the date picker to match so
+      // the entry can't be saved under the wrong day.
+      if (d.day && d.day !== sleepDate) {
+        setSleepDate(d.day);
+        setSyncStatus("older");
+      } else {
+        // Early-morning syncs can also get the scores before the ring has
+        // uploaded the detailed session (hours/REM/HR/HRV). Flag it instead
+        // of claiming done.
+        const gotScores = d.sleepScore != null || d.readiness != null;
+        const gotDetail = !!(d.hoursSlept || d.hrv != null || d.heartRate != null);
+        setSyncStatus(gotScores && !gotDetail ? "partial" : "done");
+      }
     } catch (e) {
       setSyncStatus(e.message || "Sync failed");
     }
@@ -2059,6 +2069,11 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
         {syncStatus === "partial" && (
           <div style={{ fontSize: 9, color: "#c49a1a", marginTop: 8, lineHeight: 1.5 }}>
             ⚠ Oura hasn't finished uploading last night's details yet. Sync again in a few minutes — logging twice is safe, it updates the same day.
+          </div>
+        )}
+        {syncStatus === "older" && (
+          <div style={{ fontSize: 9, color: "#c49a1a", marginTop: 8, lineHeight: 1.5 }}>
+            ⚠ Last night isn't in Oura yet — this is the night ending {new Date(sleepDate + "T12:00:00").toLocaleDateString()}, and the date has been set to match. Re-sync later for last night.
           </div>
         )}
         {syncStatus && syncStatus !== "done" && syncStatus !== "partial" && (
