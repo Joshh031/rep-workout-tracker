@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { normalizeName, findLastMatch, compareSets } from "./compare.js";
+import { parseWorkoutText } from "./parse.js";
 
 const EXERCISE_DB = {
   chest:     { staples: ["Bench Press", "Incline Bench", "Cable Fly", "Dumbbell Press", "Push-Up"], alternatives: ["Decline Bench", "Pec Deck", "Landmine Press", "Dips", "Cable Crossover", "Chest Pullover", "Floor Press", "Svend Press"] },
@@ -358,6 +359,18 @@ function VoiceFill({ tab, onFill }) {
   const parseWithClaude = async (text) => {
     setParsing(true);
     setStatus("parsing");
+    // Structured workout lines ("Name 4x8x225; 3x8x315") have a regular
+    // grammar — parse them deterministically so set counts are exact every
+    // time. Only genuinely freeform text goes to the model.
+    if (tab === "workout") {
+      const local = parseWorkoutText(text);
+      if (local) {
+        onFill(local);
+        setStatus("done");
+        setParsing(false);
+        return;
+      }
+    }
     const prompts = {
       daily: `Extract daily fitness data from this text and return ONLY valid JSON with these optional fields:
 {"steps": number, "crunches": number, "planks": number, "pushups": number, "stretches": ["calves"|"quads"|"hamstrings"|"hips"], "breathing": number, "breathProtocol": "box"|"478"}
