@@ -664,7 +664,7 @@ function CompletionModal({ modal, postDaily, setPostDaily, postStretch, setPostS
 Session data (statuses: weight=heavier top set, reps=more reps, volume=extra volume at same top set, tied=held, behind=regressed, new=no comparison):
 ${JSON.stringify(modal.readoutCtx, null, 1)}
 
-Cover, in flowing prose: (1) overall verdict vs the last ${modal.readoutCtx.bodyPart} session, naming the standout and any regression with actual numbers; (2) whether recovery context (last night's sleep/readiness/HRV vs the 7-day average) plausibly explains over- or under-performance — hedge if the data is ambiguous, never invent causes; (3) any plateau flags — call them out with how many sessions stuck; (4) if timeEconomics is present, judge time discipline in a sentence: alarm-to-gym and arrival-to-first-set gaps vs the typical values — if today's gaps are meaningfully worse, say so plainly (that's usually phone time); treat sauna as intentional recovery, never wasted time; (5) finish with 1-2 specific, actionable prescriptions for next session (a progression scheme like adding 5 lbs or a rep, or one accessory exercise worth adding and why). Use the actual exercise names and numbers. No preamble — start with the verdict.` }],
+Cover, in flowing prose: (1) overall verdict vs the last ${modal.readoutCtx.bodyPart} session, naming the standout and any regression with actual numbers; (2) whether recovery context (last night's sleep/readiness/HRV vs the 7-day average) plausibly explains over- or under-performance — hedge if the data is ambiguous, never invent causes; (3) any plateau flags — call them out with how many sessions stuck; (4) if timeEconomics is present, judge time discipline in a sentence: alarm-to-gym and arrival-to-first-set gaps vs the typical values — if today's gaps are meaningfully worse, say so plainly (that's usually phone time); if ouraDetectedWake is present, use it to split in-bed time from at-home time (e.g. alarm 5:45 but up at 6:10 = 25 min in bed), but treat Oura wake detection as a soft, sometimes-inaccurate signal — if it looks contradictory, note the discrepancy instead of drawing conclusions; treat sauna as intentional recovery, never wasted time; (5) finish with 1-2 specific, actionable prescriptions for next session (a progression scheme like adding 5 lbs or a rep, or one accessory exercise worth adding and why). Use the actual exercise names and numbers. No preamble — start with the verdict.` }],
       });
       setReadout(text.trim());
       setReadoutState("done");
@@ -989,6 +989,11 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
           typicalArrivalToFirstSetMin: avgOf(h => minutesBetween(h.timing.gymArrival, h.timing.workoutStart)),
           pastSessionsWithTiming: timed.length,
         };
+        const todaySleepEntry = sleepLog.find(sl => sl.date === displayDate) || null;
+        if (todaySleepEntry?.wakeTime) {
+          timeEconomics.ouraDetectedWake = todaySleepEntry.wakeTime;
+          timeEconomics.ouraWakeMinAfterAlarm = minutesBetween(timing.alarm, todaySleepEntry.wakeTime);
+        }
       }
 
       const readoutCtx = {
@@ -1545,6 +1550,17 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
               {minutesBetween(timing.gymArrival, timing.workoutStart) != null && `gym → first set ${minutesBetween(timing.gymArrival, timing.workoutStart)}m`}
             </div>
           )}
+          {(() => {
+            // Oura's detected wake for today, as a soft reference vs the alarm
+            const wake = sleepLog.find(sl => sl.date === new Date().toLocaleDateString())?.wakeTime;
+            if (!wake) return null;
+            const delta = minutesBetween(timing.alarm, wake);
+            return (
+              <div style={{ fontSize: 9, color: "#777", letterSpacing: 1, marginTop: 6 }}>
+                ⌚ Oura detected wake {wake}{timing.alarm && delta != null ? ` · ${delta >= 0 ? `${delta}m after alarm` : `${-delta}m before alarm`}` : ""}
+              </div>
+            );
+          })()}
         </div>
 
         <button style={g.primary} onClick={saveWorkout}>{saved ? "✓  SESSION SAVED" : "SAVE SESSION"}</button>
@@ -2070,7 +2086,7 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, saveEntries, updateEntry, 
 
 // ── SLEEP TAB ──────────────────────────────────────────────────────────────
 function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, history, dailyLog }) {
-  const [oura, setOura] = useState({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "" });
+  const [oura, setOura] = useState({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "", wakeTime: "" });
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [sleepDate, setSleepDate] = useState(() => new Date().toLocaleDateString("en-CA"));
@@ -2094,6 +2110,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
         heartRate: d.heartRate != null ? String(d.heartRate) : o.heartRate,
         hrv: d.hrv != null ? String(d.hrv) : o.hrv,
         respiratoryRate: d.respiratoryRate != null ? String(d.respiratoryRate) : o.respiratoryRate,
+        wakeTime: d.wakeTime || o.wakeTime,
       }));
       // Oura tells us which wake-day this night actually belongs to. If it
       // isn't the selected date (early sync before last night is processed,
@@ -2135,7 +2152,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
       const byDate = new Map();
       sleepLog.forEach(s => { if (!byDate.has(s.date)) byDate.set(s.date, s); });
       const str = (v) => v != null ? String(v) : "";
-      const FIELDS = ["sleepScore", "readiness", "hoursSlept", "rem", "heartRate", "hrv", "respiratoryRate"];
+      const FIELDS = ["sleepScore", "readiness", "hoursSlept", "rem", "heartRate", "hrv", "respiratoryRate", "wakeTime"];
       const base = Date.now();
 
       const toCreate = [], toRepair = [];
@@ -2145,6 +2162,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
           hoursSlept: n.hoursSlept || "", rem: n.rem || "",
           heartRate: str(n.heartRate), hrv: str(n.hrv),
           respiratoryRate: str(n.respiratoryRate),
+          wakeTime: n.wakeTime || "",
         };
         const displayDate = new Date(n.day + "T12:00:00").toLocaleDateString();
         const existing = byDate.get(displayDate);
@@ -2207,7 +2225,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
     let entry;
     if (existing) {
       entry = { ...existing };
-      for (const k of ["sleepScore", "readiness", "hoursSlept", "rem", "heartRate", "hrv", "respiratoryRate"]) {
+      for (const k of ["sleepScore", "readiness", "hoursSlept", "rem", "heartRate", "hrv", "respiratoryRate", "wakeTime"]) {
         if (oura[k]) entry[k] = oura[k];
       }
       entry.jhSpread = (entry.hrv && entry.heartRate)
@@ -2227,7 +2245,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
       return;
     }
     setSaveError("");
-    setOura({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "" });
+    setOura({ sleepScore: "", readiness: "", hoursSlept: "", rem: "", heartRate: "", hrv: "", respiratoryRate: "", wakeTime: "" });
     setSleepDate(new Date().toLocaleDateString("en-CA"));
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -2248,7 +2266,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
             style={{ ...g.primary, marginBottom: 0, flex: 1, padding: "12px 0", fontSize: 10, letterSpacing: 2, opacity: syncing ? 0.6 : 1 }}>
             {syncing ? "⟳ SYNCING…" : "⟲ SYNC FROM OURA"}
           </button>
-          {syncStatus === "done" && <span style={{ fontSize: 9, color: "#3a9e4f", letterSpacing: 1 }}>✓ FILLED</span>}
+          {syncStatus === "done" && <span style={{ fontSize: 9, color: "#3a9e4f", letterSpacing: 1 }}>✓ FILLED{oura.wakeTime ? ` · WOKE ${oura.wakeTime}` : ""}</span>}
           {syncStatus === "partial" && <span style={{ fontSize: 9, color: "#c49a1a", letterSpacing: 1 }}>⚠ SCORES ONLY</span>}
         </div>
         {syncStatus === "partial" && (
