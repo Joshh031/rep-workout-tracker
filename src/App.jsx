@@ -51,6 +51,18 @@ function breathSecondsOf(entry) {
 
 const fmtMMSS = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
+// Minutes between two "HH:MM" clock times; assumes forward order and
+// tolerates crossing midnight (e.g. alarm 23:50 -> gym 00:35).
+const minutesBetween = (a, b) => {
+  if (!a || !b) return null;
+  const [ah, am] = a.split(":").map(Number);
+  const [bh, bm] = b.split(":").map(Number);
+  if ([ah, am, bh, bm].some(Number.isNaN)) return null;
+  let diff = (bh * 60 + bm) - (ah * 60 + am);
+  if (diff < -720) diff += 1440;
+  return diff;
+};
+
 // Target orb scale for each phase: inhale → full, exhale → small, hold → stay.
 function breathScaleTargets(phases) {
   let cur = 0.42;
@@ -652,7 +664,7 @@ function CompletionModal({ modal, postDaily, setPostDaily, postStretch, setPostS
 Session data (statuses: weight=heavier top set, reps=more reps, volume=extra volume at same top set, tied=held, behind=regressed, new=no comparison):
 ${JSON.stringify(modal.readoutCtx, null, 1)}
 
-Cover, in flowing prose: (1) overall verdict vs the last ${modal.readoutCtx.bodyPart} session, naming the standout and any regression with actual numbers; (2) whether recovery context (last night's sleep/readiness/HRV vs the 7-day average) plausibly explains over- or under-performance — hedge if the data is ambiguous, never invent causes; (3) any plateau flags — call them out with how many sessions stuck; (4) finish with 1-2 specific, actionable prescriptions for next session (a progression scheme like adding 5 lbs or a rep, or one accessory exercise worth adding and why). Use the actual exercise names and numbers. No preamble — start with the verdict.` }],
+Cover, in flowing prose: (1) overall verdict vs the last ${modal.readoutCtx.bodyPart} session, naming the standout and any regression with actual numbers; (2) whether recovery context (last night's sleep/readiness/HRV vs the 7-day average) plausibly explains over- or under-performance — hedge if the data is ambiguous, never invent causes; (3) any plateau flags — call them out with how many sessions stuck; (4) if timeEconomics is present, judge time discipline in a sentence: alarm-to-gym and arrival-to-first-set gaps vs the typical values — if today's gaps are meaningfully worse, say so plainly (that's usually phone time); treat sauna as intentional recovery, never wasted time; (5) finish with 1-2 specific, actionable prescriptions for next session (a progression scheme like adding 5 lbs or a rep, or one accessory exercise worth adding and why). Use the actual exercise names and numbers. No preamble — start with the verdict.` }],
       });
       setReadout(text.trim());
       setReadoutState("done");
@@ -757,6 +769,8 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
   const [postWorkoutDaily, setPostWorkoutDaily] = useState({ crunches: "", planks: "", pushups: "" });
   const [postStretch, setPostStretch] = useState({});
   const [backlogDismissed, setBacklogDismissed] = useState(false);
+  // Session time economics: alarm -> gym -> first set, plus sauna
+  const [timing, setTiming] = useState({ alarm: "", gymArrival: "", workoutStart: "", sauna: false });
   const autoSaveTimer = useRef(null);
 
   // Build a list of missed logs over the last 7 days (excluding today)
@@ -796,10 +810,10 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
     if (mode !== "log" || !workoutType || workoutType === "run") return;
     clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => {
-      const draft = { workoutType, exercises, savedAt: new Date().toISOString() };
+      const draft = { workoutType, exercises, timing, savedAt: new Date().toISOString() };
       localStorage.setItem("rep_draft", JSON.stringify(draft));
     }, 800);
-  }, [exercises, mode, workoutType]);
+  }, [exercises, timing, mode, workoutType]);
 
   // Restore draft on mount if one exists
   const [showDraftBanner, setShowDraftBanner] = useState(false);
@@ -821,6 +835,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
     if (!pendingDraft) return;
     setWorkoutType(pendingDraft.workoutType);
     setExercises(pendingDraft.exercises);
+    if (pendingDraft.timing) setTiming(pendingDraft.timing);
     setMode("log");
     setShowDraftBanner(false);
   };
@@ -837,6 +852,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
     setWorkoutType(type);
     if (type !== "run") setExercises(EXERCISE_DB[type].staples.map(n => ({ name: n, sets: [{ reps: "", weight: "" }] })));
     else setRunData({ distance: "", duration: "", firstStop: "", pace: "", heartRate: "", maxSpeed: "", location: "", feel: "", stopReason: "", notes: "" });
+    setTiming({ alarm: "", gymArrival: "", workoutStart: "", sauna: false });
     setMode("preview");
     setSaved(false);
     localStorage.removeItem("rep_draft");
@@ -868,7 +884,8 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
       }
     }
     const displayDate = new Date(workoutDate + "T12:00:00").toLocaleDateString();
-    const entry = { id: Date.now(), date: displayDate, type: workoutType, ...(workoutType === "run" ? { runData } : { exercises }) };
+    const hasTiming = timing.alarm || timing.gymArrival || timing.workoutStart || timing.sauna;
+    const entry = { id: Date.now(), date: displayDate, type: workoutType, ...(workoutType === "run" ? { runData } : { exercises }), ...(hasTiming ? { timing } : {}) };
 
     // Build completion stats for modal
     if (workoutType !== "run" && exercises.length) {
@@ -952,6 +969,28 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         },
       } : null;
 
+      // Time economics: today's gaps vs the typical gaps across past
+      // sessions that logged timing.
+      let timeEconomics = null;
+      if (hasTiming) {
+        const timed = history.filter(h => h.timing);
+        const avgOf = (fn) => {
+          const vals = timed.map(fn).filter(v => v != null && v >= 0);
+          return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+        };
+        timeEconomics = {
+          alarmSetFor: timing.alarm || null,
+          arrivedAtGym: timing.gymArrival || null,
+          firstSet: timing.workoutStart || null,
+          sauna: !!timing.sauna,
+          alarmToGymMin: minutesBetween(timing.alarm, timing.gymArrival),
+          arrivalToFirstSetMin: minutesBetween(timing.gymArrival, timing.workoutStart),
+          typicalAlarmToGymMin: avgOf(h => minutesBetween(h.timing.alarm, h.timing.gymArrival)),
+          typicalArrivalToFirstSetMin: avgOf(h => minutesBetween(h.timing.gymArrival, h.timing.workoutStart)),
+          pastSessionsWithTiming: timed.length,
+        };
+      }
+
       const readoutCtx = {
         bodyPart: workoutType,
         date: displayDate,
@@ -960,6 +999,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         newAllTimePRs: prs.map(p => `${p.name}: ${p.weight} lbs (prev ${p.prev})`),
         trajectory,
         recovery,
+        timeEconomics,
       };
 
       setCompletionModal({
@@ -1479,6 +1519,33 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
             </div>
           );
         })()}
+
+        {/* Time economics: alarm -> gym -> first set + sauna */}
+        <div style={{ ...g.card, padding: "12px 14px", marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>⏱ Time Economics</span>
+            <button onClick={() => setTiming(t => ({ ...t, sauna: !t.sauna }))}
+              style={{ padding: "4px 10px", borderRadius: 5, border: `1px solid ${timing.sauna ? "#1a4020" : "#252525"}`, background: timing.sauna ? "#0b180b" : "none", color: timing.sauna ? "#3a9e4f" : "#888", fontSize: 8, letterSpacing: 2, cursor: "pointer", fontFamily: "'DM Mono', monospace" }}>
+              {timing.sauna ? "✓ SAUNA" : "SAUNA?"}
+            </button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            {[["alarm", "Alarm set"], ["gymArrival", "At gym"], ["workoutStart", "First set"]].map(([f, lbl]) => (
+              <div key={f}>
+                <div style={{ fontSize: 7, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>{lbl}</div>
+                <input type="time" value={timing[f]} onChange={e => setTiming(t => ({ ...t, [f]: e.target.value }))}
+                  style={{ ...g.numInput, fontSize: 11, padding: "8px 2px", colorScheme: "dark" }} />
+              </div>
+            ))}
+          </div>
+          {(minutesBetween(timing.alarm, timing.gymArrival) != null || minutesBetween(timing.gymArrival, timing.workoutStart) != null) && (
+            <div style={{ fontSize: 9, color: "#3a8fc4", letterSpacing: 1, marginTop: 8 }}>
+              {minutesBetween(timing.alarm, timing.gymArrival) != null && `alarm → gym ${minutesBetween(timing.alarm, timing.gymArrival)}m`}
+              {minutesBetween(timing.alarm, timing.gymArrival) != null && minutesBetween(timing.gymArrival, timing.workoutStart) != null && " · "}
+              {minutesBetween(timing.gymArrival, timing.workoutStart) != null && `gym → first set ${minutesBetween(timing.gymArrival, timing.workoutStart)}m`}
+            </div>
+          )}
+        </div>
 
         <button style={g.primary} onClick={saveWorkout}>{saved ? "✓  SESSION SAVED" : "SAVE SESSION"}</button>
         {saveError && <div style={{ fontSize: 10, color: "#c0392b", marginTop: -4, marginBottom: 10, textAlign: "center" }}>{saveError}</div>}
@@ -2564,6 +2631,16 @@ function WorkoutHistoryCard({ entry: e, onDelete }) {
 
       {expanded && e.exercises && (
         <div style={{ borderTop: "1px solid #1a1a1a", padding: "10px 14px" }}>
+          {e.timing && (
+            <div style={{ fontSize: 9, color: "#3a8fc4", letterSpacing: 1, marginBottom: 10 }}>
+              ⏱ {[
+                e.timing.alarm && `alarm ${e.timing.alarm}`,
+                e.timing.gymArrival && `gym ${e.timing.gymArrival}${minutesBetween(e.timing.alarm, e.timing.gymArrival) != null ? ` (+${minutesBetween(e.timing.alarm, e.timing.gymArrival)}m)` : ""}`,
+                e.timing.workoutStart && `first set ${e.timing.workoutStart}${minutesBetween(e.timing.gymArrival, e.timing.workoutStart) != null ? ` (+${minutesBetween(e.timing.gymArrival, e.timing.workoutStart)}m)` : ""}`,
+                e.timing.sauna && "sauna ✓",
+              ].filter(Boolean).join(" · ")}
+            </div>
+          )}
           {e.exercises.map((ex, i) => {
             const filledSets = ex.sets.filter(s => s.reps || s.weight);
             if (!filledSets.length) return null;
