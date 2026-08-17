@@ -635,6 +635,35 @@ function QuickFillBar({ onApply, vacationMode }) {
 // Post-workout overlay: per-exercise comparison vs last session, PRs, and a
 // quick crunches/stretches log before closing.
 function CompletionModal({ modal, postDaily, setPostDaily, postStretch, setPostStretch, onDone }) {
+  // One-paragraph coach readout, generated from the session context that
+  // saveWorkout precomputed (comparisons, trajectory, plateau flags, Oura
+  // recovery). Facts are supplied; the model interprets and prescribes.
+  const [readout, setReadout] = useState("");
+  const [readoutState, setReadoutState] = useState("loading"); // loading | done | error
+  const fetchReadout = async () => {
+    setReadoutState("loading");
+    try {
+      const text = await anthropicParse({
+        model: "claude-sonnet-4-6",
+        max_tokens: 600,
+        output_config: { effort: "medium" },
+        messages: [{ role: "user", content: `You are a sharp, direct strength coach reviewing today's ${modal.readoutCtx.bodyPart} session. Write ONE plain-text paragraph (120-180 words, no headers, no bullet points, no markdown).
+
+Session data (statuses: weight=heavier top set, reps=more reps, volume=extra volume at same top set, tied=held, behind=regressed, new=no comparison):
+${JSON.stringify(modal.readoutCtx, null, 1)}
+
+Cover, in flowing prose: (1) overall verdict vs the last ${modal.readoutCtx.bodyPart} session, naming the standout and any regression with actual numbers; (2) whether recovery context (last night's sleep/readiness/HRV vs the 7-day average) plausibly explains over- or under-performance — hedge if the data is ambiguous, never invent causes; (3) any plateau flags — call them out with how many sessions stuck; (4) finish with 1-2 specific, actionable prescriptions for next session (a progression scheme like adding 5 lbs or a rep, or one accessory exercise worth adding and why). Use the actual exercise names and numbers. No preamble — start with the verdict.` }],
+      });
+      setReadout(text.trim());
+      setReadoutState("done");
+    } catch (e) {
+      setReadoutState("error");
+    }
+  };
+  useEffect(() => {
+    if (modal?.readoutCtx) fetchReadout();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: "24px 20px", width: "100%", maxWidth: 380, maxHeight: "90vh", overflowY: "auto" }}>
@@ -665,6 +694,25 @@ function CompletionModal({ modal, postDaily, setPostDaily, postStretch, setPostS
             ))}
           </div>
         )}
+        {/* Coach readout */}
+        {modal.readoutCtx && (
+          <div style={{ background: "#0e0e14", border: "1px solid #22222e", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+            <div style={{ fontSize: 8, letterSpacing: 2, color: "#8a8ac4", textTransform: "uppercase", marginBottom: 8 }}>⚡ Coach Readout</div>
+            {readoutState === "loading" && (
+              <div style={{ fontSize: 10, color: "#777", letterSpacing: 1 }}>⟳ Analyzing session vs history & recovery…</div>
+            )}
+            {readoutState === "done" && (
+              <div style={{ fontSize: 11, color: "#bbb", lineHeight: 1.8 }}>{readout}</div>
+            )}
+            {readoutState === "error" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 10, color: "#c0392b" }}>✕ Couldn't generate readout</span>
+                <button onClick={fetchReadout} style={{ ...g.ghost, fontSize: 8, padding: "4px 10px" }}>↺ RETRY</button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Post-workout crunches + stretches */}
         <div style={{ background: "#181818", border: "1px solid #1a1a1a", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
           <div style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Log Crunches & Stretches</div>
@@ -857,8 +905,65 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         if (todayMax > prevMax && prevMax > 0) prs.push({ name: ex.name, weight: todayMax, prev: prevMax });
       });
 
+      // Context for the AI coach readout. Trajectory and plateau flags are
+      // computed here deterministically so the model reasons over facts
+      // instead of re-deriving them.
+      const typeSessions = history.filter(h => h.type === workoutType).slice(0, 6);
+      const trajectory = exercises.map(ex => {
+        if (!ex.name) return null;
+        const filled = ex.sets.filter(s => s.reps || s.weight);
+        if (!filled.length) return null;
+        const todayMaxW = Math.max(0, ...filled.map(s => parseFloat(s.weight) || 0));
+        const recent = [];
+        typeSessions.forEach(sess => {
+          const m = findLastMatch(ex.name, sess.exercises || []);
+          const mf = m?.sets.filter(s => s.reps || s.weight) || [];
+          if (mf.length) recent.push({
+            date: sess.date,
+            maxW: Math.max(0, ...mf.map(s => parseFloat(s.weight) || 0)),
+            maxR: Math.max(0, ...mf.map(s => parseFloat(s.reps) || 0)),
+            sets: mf.length,
+          });
+        });
+        let allTimeMaxW = 0;
+        history.forEach(sess => {
+          const m = findLastMatch(ex.name, sess.exercises || []);
+          (m?.sets || []).forEach(s => { const w = parseFloat(s.weight) || 0; if (w > allTimeMaxW) allTimeMaxW = w; });
+        });
+        // Plateau: today's top weight unchanged across consecutive recent sessions
+        let stuck = 0;
+        for (const h of recent) { if (todayMaxW > 0 && h.maxW === todayMaxW) stuck++; else break; }
+        return {
+          name: ex.name, todayMaxW,
+          todaySets: filled.length,
+          recent, allTimeMaxW,
+          plateau: stuck >= 2 ? `top weight stuck at ${todayMaxW} for ${stuck + 1} straight sessions` : null,
+        };
+      }).filter(Boolean);
+
+      const latestSleep = sleepLog[0] || null;
+      const recentSleep = sleepLog.slice(0, 7);
+      const avg = (arr) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
+      const recovery = latestSleep ? {
+        lastNight: { date: latestSleep.date, sleepScore: latestSleep.sleepScore, readiness: latestSleep.readiness, hoursSlept: latestSleep.hoursSlept, hrv: latestSleep.hrv },
+        sevenDayAvg: {
+          sleepScore: avg(recentSleep.map(s => parseFloat(s.sleepScore)).filter(Boolean)),
+          hrv: avg(recentSleep.map(s => parseFloat(s.hrv)).filter(Boolean)),
+        },
+      } : null;
+
+      const readoutCtx = {
+        bodyPart: workoutType,
+        date: displayDate,
+        lastSessionDate: lastSession?.date || null,
+        vsLastSession: exResults.map(r => `${r.name}: ${r.status}${r.lastMaxW || r.lastMaxR ? ` (${r.lastMaxR}x${r.lastMaxW} -> ${r.todayMaxR}x${r.todayMaxW})` : ""} · ${r.sets} sets`),
+        newAllTimePRs: prs.map(p => `${p.name}: ${p.weight} lbs (prev ${p.prev})`),
+        trajectory,
+        recovery,
+      };
+
       setCompletionModal({
-        exResults, prs, type: workoutType, lastDate: lastSession?.date,
+        exResults, prs, type: workoutType, lastDate: lastSession?.date, readoutCtx,
         saveDaily: async (dailyData, stretches) => {
           const today = new Date().toLocaleDateString();
           const newStretches = Object.keys(stretches).filter(k => stretches[k]);
