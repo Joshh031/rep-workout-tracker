@@ -20,9 +20,15 @@ const hmm = (sec) => {
   return `${h}:${String(m).padStart(2, "0")}`;
 };
 
+// Local wall-clock "HH:MM" from an Oura ISO timestamp (parse the literal
+// time in the string — the server runs in UTC, so Date conversion would
+// shift the user's local time).
+const clockOf = (iso) => (typeof iso === "string" && (iso.match(/T(\d{2}:\d{2})/) || [])[1]) || "";
+
 // Map one day's joined records to the app's field shape
 const mapNight = (day, ds, dr, period) => ({
   day,
+  wakeTime: clockOf(period?.bedtime_end),
   sleepScore: ds?.score ?? null,
   readiness: dr?.score ?? null,
   hoursSlept: hmm(period?.total_sleep_duration),
