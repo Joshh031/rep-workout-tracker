@@ -1394,6 +1394,45 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
           </div>
         </div>
 
+        {/* Time economics: alarm -> gym -> first set + sauna */}
+        <div style={{ ...g.card, padding: "12px 14px", marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>⏱ Time Economics</span>
+            <button onClick={() => setTiming(t => ({ ...t, sauna: !t.sauna }))}
+              style={{ padding: "4px 10px", borderRadius: 5, border: `1px solid ${timing.sauna ? "#1a4020" : "#252525"}`, background: timing.sauna ? "#0b180b" : "none", color: timing.sauna ? "#3a9e4f" : "#888", fontSize: 8, letterSpacing: 2, cursor: "pointer", fontFamily: "'DM Mono', monospace" }}>
+              {timing.sauna ? "✓ SAUNA" : "SAUNA?"}
+            </button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            {[["alarm", "Alarm set"], ["gymArrival", "At gym"], ["workoutStart", "First set"]].map(([f, lbl]) => (
+              <div key={f}>
+                <div style={{ fontSize: 7, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>{lbl}</div>
+                <input type="time" value={timing[f]} onChange={e => setTiming(t => ({ ...t, [f]: e.target.value }))}
+                  style={{ ...g.numInput, fontSize: 11, padding: "8px 2px", colorScheme: "dark" }} />
+              </div>
+            ))}
+          </div>
+          {(minutesBetween(timing.alarm, timing.gymArrival) != null || minutesBetween(timing.gymArrival, timing.workoutStart) != null) && (
+            <div style={{ fontSize: 9, color: "#3a8fc4", letterSpacing: 1, marginTop: 8 }}>
+              {minutesBetween(timing.alarm, timing.gymArrival) != null && `alarm → gym ${minutesBetween(timing.alarm, timing.gymArrival)}m`}
+              {minutesBetween(timing.alarm, timing.gymArrival) != null && minutesBetween(timing.gymArrival, timing.workoutStart) != null && " · "}
+              {minutesBetween(timing.gymArrival, timing.workoutStart) != null && `gym → first set ${minutesBetween(timing.gymArrival, timing.workoutStart)}m`}
+            </div>
+          )}
+          {(() => {
+            // Oura's detected wake for today, as a soft reference vs the alarm
+            const wake = sleepLog.find(sl => sl.date === new Date().toLocaleDateString())?.wakeTime;
+            if (!wake) return null;
+            const delta = minutesBetween(timing.alarm, wake);
+            return (
+              <div style={{ fontSize: 9, color: "#777", letterSpacing: 1, marginTop: 6 }}>
+                ⌚ Oura detected wake {wake}{timing.alarm && delta != null ? ` · ${delta >= 0 ? `${delta}m after alarm` : `${-delta}m before alarm`}` : ""}
+              </div>
+            );
+          })()}
+        </div>
+
+
         <VoiceFill tab="workout" onFill={(parsed) => {
           if (parsed.exercises?.length) {
             const incoming = parsed.exercises.map(e => ({
@@ -1524,44 +1563,6 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
             </div>
           );
         })()}
-
-        {/* Time economics: alarm -> gym -> first set + sauna */}
-        <div style={{ ...g.card, padding: "12px 14px", marginBottom: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <span style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase" }}>⏱ Time Economics</span>
-            <button onClick={() => setTiming(t => ({ ...t, sauna: !t.sauna }))}
-              style={{ padding: "4px 10px", borderRadius: 5, border: `1px solid ${timing.sauna ? "#1a4020" : "#252525"}`, background: timing.sauna ? "#0b180b" : "none", color: timing.sauna ? "#3a9e4f" : "#888", fontSize: 8, letterSpacing: 2, cursor: "pointer", fontFamily: "'DM Mono', monospace" }}>
-              {timing.sauna ? "✓ SAUNA" : "SAUNA?"}
-            </button>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            {[["alarm", "Alarm set"], ["gymArrival", "At gym"], ["workoutStart", "First set"]].map(([f, lbl]) => (
-              <div key={f}>
-                <div style={{ fontSize: 7, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>{lbl}</div>
-                <input type="time" value={timing[f]} onChange={e => setTiming(t => ({ ...t, [f]: e.target.value }))}
-                  style={{ ...g.numInput, fontSize: 11, padding: "8px 2px", colorScheme: "dark" }} />
-              </div>
-            ))}
-          </div>
-          {(minutesBetween(timing.alarm, timing.gymArrival) != null || minutesBetween(timing.gymArrival, timing.workoutStart) != null) && (
-            <div style={{ fontSize: 9, color: "#3a8fc4", letterSpacing: 1, marginTop: 8 }}>
-              {minutesBetween(timing.alarm, timing.gymArrival) != null && `alarm → gym ${minutesBetween(timing.alarm, timing.gymArrival)}m`}
-              {minutesBetween(timing.alarm, timing.gymArrival) != null && minutesBetween(timing.gymArrival, timing.workoutStart) != null && " · "}
-              {minutesBetween(timing.gymArrival, timing.workoutStart) != null && `gym → first set ${minutesBetween(timing.gymArrival, timing.workoutStart)}m`}
-            </div>
-          )}
-          {(() => {
-            // Oura's detected wake for today, as a soft reference vs the alarm
-            const wake = sleepLog.find(sl => sl.date === new Date().toLocaleDateString())?.wakeTime;
-            if (!wake) return null;
-            const delta = minutesBetween(timing.alarm, wake);
-            return (
-              <div style={{ fontSize: 9, color: "#777", letterSpacing: 1, marginTop: 6 }}>
-                ⌚ Oura detected wake {wake}{timing.alarm && delta != null ? ` · ${delta >= 0 ? `${delta}m after alarm` : `${-delta}m before alarm`}` : ""}
-              </div>
-            );
-          })()}
-        </div>
 
         <button style={g.primary} onClick={saveWorkout}>{saved ? "✓  SESSION SAVED" : "SAVE SESSION"}</button>
         {saveError && <div style={{ fontSize: 10, color: "#c0392b", marginTop: -4, marginBottom: 10, textAlign: "center" }}>{saveError}</div>}
