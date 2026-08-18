@@ -688,7 +688,12 @@ Cover, in flowing prose: (1) overall verdict vs the last ${modal.readoutCtx.body
                 <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: idx < modal.exResults.length - 1 ? "1px solid #1a1a1a" : "none" }}>
                   <div>
                     <div style={{ fontSize: 10, color: "#ccc" }}>{r.name}</div>
-                    {r.lastMaxW > 0 && <div style={{ fontSize: 8, color: "#777", marginTop: 2 }}>{r.lastMaxR}×{r.lastMaxW} → {r.todayMaxR}×{r.todayMaxW}</div>}
+                    {(r.lastMaxW > 0 || r.lastMaxR > 0) && (
+                      <div style={{ fontSize: 8, color: "#777", marginTop: 2 }}>
+                        {r.lastMaxR}×{r.lastMaxW} → {r.todayMaxR}×{r.todayMaxW}
+                        {r.vsDate && r.vsDate !== modal.lastDate && <span style={{ color: "#3a8fc4" }}> · vs {r.vsDate.replace(/\/\d{4}$/, "")}</span>}
+                      </div>
+                    )}
                   </div>
                   <span style={{ fontSize: 7, fontWeight: 700, color, border: `1px solid ${color}`, borderRadius: 4, padding: "2px 6px", letterSpacing: 1 }}>{icon}</span>
                 </div>
@@ -902,10 +907,20 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         if (!ex.name) return null;
         const filledSets = ex.sets.filter(s => s.reps || s.weight);
         if (!filledSets.length) return null;
-        const lastEx = findLastMatch(ex.name, lastSession?.exercises || [], claimed);
-        const lastFilled = lastEx?.sets.filter(s => s.reps || s.weight) || [];
+        let lastEx = findLastMatch(ex.name, lastSession?.exercises || [], claimed);
+        let vsDate = lastEx ? (lastSession?.date || null) : null;
+        if (!lastEx) {
+          // Not in the last session of this type — compare against the most
+          // recent session (any type) where the exercise appears, so e.g.
+          // shrugs done on shoulders day aren't mislabeled NEW on back day.
+          for (const sess of history) {
+            const m = findLastMatch(ex.name, sess.exercises || []);
+            if (m && m.sets?.some(st => st.reps || st.weight)) { lastEx = m; vsDate = sess.date; break; }
+          }
+        }
+        const lastFilled = lastEx?.sets.filter(st => st.reps || st.weight) || [];
         const cmp = compareSets(filledSets, lastFilled);
-        return { name: ex.name, ...cmp, sets: filledSets.length };
+        return { name: ex.name, ...cmp, sets: filledSets.length, vsDate: lastFilled.length ? vsDate : null };
       }).filter(Boolean);
 
       // PRs — exercises beating all-time max
@@ -1003,7 +1018,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         bodyPart: workoutType,
         date: displayDate,
         lastSessionDate: lastSession?.date || null,
-        vsLastSession: exResults.map(r => `${r.name}: ${r.status}${r.lastMaxW || r.lastMaxR ? ` (${r.lastMaxR}x${r.lastMaxW} -> ${r.todayMaxR}x${r.todayMaxW})` : ""} · ${r.sets} sets`),
+        vsLastSession: exResults.map(r => `${r.name}: ${r.status}${r.lastMaxW || r.lastMaxR ? ` (${r.lastMaxR}x${r.lastMaxW} -> ${r.todayMaxR}x${r.todayMaxW})` : ""} · ${r.sets} sets${r.vsDate && r.vsDate !== (lastSession?.date || null) ? ` · compared vs ${r.vsDate} (not in last ${workoutType} session)` : ""}`),
         newAllTimePRs: prs.map(p => `${p.name}: ${p.weight} lbs (prev ${p.prev})`),
         trajectory,
         recovery,
@@ -1537,11 +1552,18 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
             if (!ex.name) return null;
             const filledSets = ex.sets.filter(s => s.reps || s.weight);
             if (!filledSets.length) return null;
-            const lastEx = findLastMatch(ex.name, lastSession.exercises || [], claimed);
+            let lastEx = findLastMatch(ex.name, lastSession.exercises || [], claimed);
+            let vsDate = lastEx ? lastSession.date : null;
+            if (!lastEx) {
+              for (const sess of history) {
+                const m = findLastMatch(ex.name, sess.exercises || []);
+                if (m && m.sets?.some(st => st.reps || st.weight)) { lastEx = m; vsDate = sess.date; break; }
+              }
+            }
             if (!lastEx) return null;
-            const lastFilled = lastEx.sets.filter(s => s.reps || s.weight);
+            const lastFilled = lastEx.sets.filter(st => st.reps || st.weight);
             const cmp = compareSets(filledSets, lastFilled);
-            return { name: ex.name, ...cmp };
+            return { name: ex.name, ...cmp, vsDate };
           }).filter(Boolean);
 
           if (!results.length) return null;
@@ -1557,6 +1579,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
                       <div style={{ fontSize: 10, color: "#ccc" }}>{r.name}</div>
                       <div style={{ fontSize: 8, color: "#777", marginTop: 2 }}>
                         Last: {r.lastMaxR}×{r.lastMaxW}lbs → Today: {r.todayMaxR}×{r.todayMaxW}lbs
+                        {r.vsDate && r.vsDate !== lastSession.date && <span style={{ color: "#3a8fc4" }}> · vs {r.vsDate.replace(/\/\d{4}$/, "")}</span>}
                       </div>
                     </div>
                     <span style={{ fontSize: 8, fontWeight: 700, color, border: `1px solid ${color}`, borderRadius: 4, padding: "2px 6px", letterSpacing: 1 }}>{icon}</span>
