@@ -3279,8 +3279,13 @@ function LockScreen({ onUnlock }) {
       <div style={{ fontSize: 26, fontWeight: 700, color: "#ff4d00", letterSpacing: 6, marginBottom: 8 }}>REP</div>
       <div style={{ fontSize: 9, letterSpacing: 3, color: "#888", textTransform: "uppercase", marginBottom: 28 }}>Enter passphrase</div>
       <form style={{ width: "100%", maxWidth: 320 }} onSubmit={e => { e.preventDefault(); if (value.trim()) onUnlock(value.trim()); }}>
+        {/* Hidden username gives iOS Keychain a credential to associate, so
+            it offers to save the passphrase and autofills it via Face ID */}
+        <input type="text" name="username" autoComplete="username" value="REP" readOnly
+          style={{ position: "absolute", opacity: 0, height: 0, width: 0, border: "none", padding: 0 }} tabIndex={-1} />
         <input
-          type="password" autoFocus value={value} onChange={e => setValue(e.target.value)}
+          type="password" name="password" autoComplete="current-password"
+          autoFocus value={value} onChange={e => setValue(e.target.value)}
           placeholder="••••••••"
           style={{ ...g.input, fontSize: 16, textAlign: "center", marginBottom: 12, padding: "14px 12px" }}
         />
@@ -3316,6 +3321,11 @@ export default function App() {
   // Locked until the stored passphrase exists; any 401 re-locks (apiFetch
   // clears the stored secret and fires this event).
   const [locked, setLocked] = useState(() => !getSecret());
+  // Ask the browser to protect this origin's storage from eviction so the
+  // stored passphrase (and drafts) survive iOS storage-pressure cleanup.
+  useEffect(() => {
+    try { navigator.storage?.persist?.().catch(() => {}); } catch (e) {}
+  }, []);
   useEffect(() => {
     const onLock = () => setLocked(true);
     window.addEventListener("rep-locked", onLock);
