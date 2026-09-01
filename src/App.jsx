@@ -2419,7 +2419,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
       {sleepLog.length > 0 && (
         <>
           <span style={{ ...g.label, marginTop: 20 }}>History</span>
-          {sleepLog.map(s => {
+          {[...sleepLog].sort((a, b) => (new Date(b.date) - new Date(a.date)) || (b.id - a.id)).map(s => {
             const sc2 = scoreColor(s.sleepScore);
             const rc2 = scoreColor(s.readiness);
             const jh = s.jhSpread;
