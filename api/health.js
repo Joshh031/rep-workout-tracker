@@ -6,7 +6,8 @@
 
 import { supabaseConfig, supabaseHeaders } from "./_supabase.js";
 
-const EXPECTED_REF = "aeennjelfkvrzmzhbpnp"; // the "rep" project that holds the app's data
+// Optional: set EXPECTED_SUPABASE_REF in Vercel to get a project-ref sanity check
+const EXPECTED_REF = process.env.EXPECTED_SUPABASE_REF || null;
 
 export default async function handler(req, res) {
   const { url, key } = supabaseConfig();
@@ -24,7 +25,7 @@ export default async function handler(req, res) {
     anthropicKeySet: !!(process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_KEY),
     supabaseUrl: url || "MISSING",
     projectRef: ref,
-    pointsAtRepProject: ref === EXPECTED_REF,
+    pointsAtExpectedProject: EXPECTED_REF ? ref === EXPECTED_REF : "set EXPECTED_SUPABASE_REF to check",
     serviceKeyType: keyType,
     serviceKeySource: process.env.SUPABASE_SERVICE_KEY ? "SUPABASE_SERVICE_KEY"
       : process.env.VITE_SUPABASE_KEY ? "VITE_SUPABASE_KEY (FALLBACK — the SUPABASE_SERVICE_KEY var is not visible to this deployment)"

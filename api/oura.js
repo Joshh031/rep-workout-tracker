@@ -2,41 +2,18 @@
 // sleep-log fields. The Oura personal access token stays server-side —
 // set OURA_TOKEN in Vercel (get one at https://cloud.ouraring.com/personal-access-tokens).
 //
-// GET /api/oura?date=YYYY-MM-DD               -> single night (date = wake day; defaults to today)
-// GET /api/oura?start=YYYY-MM-DD&end=YYYY-MM-DD -> { nights: [...] } for backfill
-// GET /api/oura?activity=YYYY-MM-DD           -> { day, steps } from daily_activity
-// GET /api/oura?activity_start=YYYY-MM-DD&activity_end=YYYY-MM-DD -> { days: [{day, steps}] }
+// GET /api/oura?date=YYYY-MM-DD                  -> single night (date = wake day; defaults to today)
+// GET /api/oura?start=YYYY-MM-DD&end=YYYY-MM-DD  -> { nights, coverage } for backfill
+// GET /api/oura?activity=YYYY-MM-DD              -> { day, steps } from daily_activity
+// GET /api/oura?activity_start=&activity_end=    -> { days: [{day, steps}] }
+// GET /api/oura?debug=1&start=&end=&s=<pass>     -> raw per-day tagging for diagnosis
 
 import { checkAuth } from "./_auth.js";
+import { DATE_RE, hmm, isoDaysAgo, fetchAll, fetchNights, mapNight } from "./_oura.js";
 
-const OURA = "https://api.ouraring.com/v2/usercollection";
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-// seconds -> "H:MM"
-const hmm = (sec) => {
-  if (!sec && sec !== 0) return "";
-  const h = Math.floor(sec / 3600);
-  const m = Math.round((sec % 3600) / 60);
-  return `${h}:${String(m).padStart(2, "0")}`;
-};
-
-// Local wall-clock "HH:MM" from an Oura ISO timestamp (parse the literal
-// time in the string — the server runs in UTC, so Date conversion would
-// shift the user's local time).
-const clockOf = (iso) => (typeof iso === "string" && (iso.match(/T(\d{2}:\d{2})/) || [])[1]) || "";
-
-// Map one day's joined records to the app's field shape
-const mapNight = (day, ds, dr, period) => ({
-  day,
-  wakeTime: clockOf(period?.bedtime_end),
-  sleepScore: ds?.score ?? null,
-  readiness: dr?.score ?? null,
-  hoursSlept: hmm(period?.total_sleep_duration),
-  rem: hmm(period?.rem_sleep_duration),
-  heartRate: period?.lowest_heart_rate ?? null,
-  hrv: period?.average_hrv != null ? Math.round(period.average_hrv) : null,
-  respiratoryRate: period?.average_breath != null ? +period.average_breath.toFixed(1) : null,
-});
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const validDate = (v) => (DATE_RE.test(v || "") ? v : null);
+const MAX_RANGE_DAYS = 370;
 
 export default async function handler(req, res) {
   if (!checkAuth(req, res)) return;
@@ -44,61 +21,22 @@ export default async function handler(req, res) {
   if (!token) {
     return res.status(500).json({ error: "OURA_TOKEN is not configured in Vercel environment variables" });
   }
-
-  // Fetch every page of a collection in [start, end]
-  const getAll = async (path, start, end) => {
-    const out = [];
-    let pageToken = null;
-    do {
-      const url = `${OURA}/${path}?start_date=${start}&end_date=${end}` +
-        (pageToken ? `&next_token=${encodeURIComponent(pageToken)}` : "");
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (!r.ok) throw new Error(`Oura ${path} failed (${r.status})`);
-      const j = await r.json();
-      out.push(...(j.data || []));
-      pageToken = j.next_token || null;
-    } while (pageToken);
-    return out;
-  };
-
-  // Join the three collections into one record per day. For sleep periods,
-  // prefer the main overnight sleep; fall back to the longest period that day.
-  const joinByDay = (dailySleep, dailyReadiness, sleepPeriods) => {
-    const days = {};
-    dailySleep.forEach(d => { (days[d.day] ||= {}).ds = d; });
-    dailyReadiness.forEach(d => { (days[d.day] ||= {}).dr = d; });
-    sleepPeriods.forEach(p => {
-      const o = days[p.day] ||= {};
-      const better = p.type === "long_sleep"
-        ? (o.period?.type !== "long_sleep" || (p.total_sleep_duration || 0) > (o.period.total_sleep_duration || 0))
-        : (!o.period || (o.period.type !== "long_sleep" && (p.total_sleep_duration || 0) > (o.period.total_sleep_duration || 0)));
-      if (better) o.period = p;
-    });
-    return days;
-  };
+  const q = req.query || {};
+  const noStore = () => res.setHeader("Cache-Control", "no-store");
+  const rangeTooLarge = (start, end) => (new Date(end) - new Date(start)) / 86400000 > MAX_RANGE_DAYS;
 
   try {
-    // ── Debug mode: show Oura's raw day-tagging for a range ──
-    // /api/oura?debug=1&start=YYYY-MM-DD&end=YYYY-MM-DD&s=<passphrase>
-    if (req.query.debug) {
-      const end = DATE_RE.test(req.query.end || "") ? req.query.end : new Date().toISOString().slice(0, 10);
-      let start = req.query.start;
-      if (!DATE_RE.test(start || "")) {
-        const s = new Date(end + "T12:00:00Z");
-        s.setUTCDate(s.getUTCDate() - 7);
-        start = s.toISOString().slice(0, 10);
-      }
-      const [ds, dr, sp] = await Promise.all([
-        getAll("daily_sleep", start, end),
-        getAll("daily_readiness", start, end),
-        getAll("sleep", start, end),
-      ]);
-      res.setHeader("Cache-Control", "no-store");
+    // ── Debug mode: Oura's raw day-tagging for a range ──
+    if (q.debug) {
+      const end = validDate(q.end) || todayIso();
+      const start = validDate(q.start) || isoDaysAgo(7, end);
+      const { raw } = await fetchNights(token, start, end);
+      noStore();
       return res.status(200).json({
         range: { start, end },
-        daily_sleep: ds.map(d => ({ day: d.day, score: d.score })),
-        daily_readiness: dr.map(d => ({ day: d.day, score: d.score })),
-        sleep_periods: sp.map(p => ({
+        daily_sleep: raw.ds.map(d => ({ day: d.day, score: d.score })),
+        daily_readiness: raw.dr.map(d => ({ day: d.day, score: d.score })),
+        sleep_periods: raw.sp.map(p => ({
           day: p.day, type: p.type,
           bedtime_start: p.bedtime_start, bedtime_end: p.bedtime_end,
           hours: hmm(p.total_sleep_duration), rem: hmm(p.rem_sleep_duration),
@@ -108,72 +46,59 @@ export default async function handler(req, res) {
     }
 
     // ── Activity range mode (steps backfill) ──
-    if (DATE_RE.test(req.query.activity_start || "")) {
-      const start = req.query.activity_start;
-      const end = DATE_RE.test(req.query.activity_end || "") ? req.query.activity_end : new Date().toISOString().slice(0, 10);
-      if ((new Date(end) - new Date(start)) / 86400000 > 370) {
-        return res.status(400).json({ error: "Range too large — max 370 days" });
-      }
-      const acts = await getAll("daily_activity", start, end);
-      res.setHeader("Cache-Control", "no-store");
+    if (validDate(q.activity_start)) {
+      const start = q.activity_start;
+      const end = validDate(q.activity_end) || todayIso();
+      if (rangeTooLarge(start, end)) return res.status(400).json({ error: `Range too large — max ${MAX_RANGE_DAYS} days` });
+      const acts = await fetchAll(token, "daily_activity", start, end);
+      noStore();
       return res.status(200).json({
         days: acts.filter(a => a.steps != null).map(a => ({ day: a.day, steps: a.steps })),
       });
     }
 
-    // ── Activity mode (daily steps) ──
-    if (DATE_RE.test(req.query.activity || "")) {
-      const day = req.query.activity;
-      const startD = new Date(day + "T12:00:00Z");
-      startD.setUTCDate(startD.getUTCDate() - 1);
-      const acts = await getAll("daily_activity", startD.toISOString().slice(0, 10), day);
+    // ── Activity mode (one day's steps) ──
+    if (validDate(q.activity)) {
+      const day = q.activity;
+      const acts = await fetchAll(token, "daily_activity", isoDaysAgo(1, day), day);
       const rec = acts.filter(a => a.day <= day).pop();
-      if (!rec) {
-        return res.status(404).json({ error: `No Oura activity data for ${day} yet` });
-      }
-      res.setHeader("Cache-Control", "no-store");
+      if (!rec) return res.status(404).json({ error: `No Oura activity data for ${day} yet` });
+      noStore();
       return res.status(200).json({ day: rec.day, steps: rec.steps ?? null });
     }
 
-    // ── Range mode (backfill) ──
-    if (DATE_RE.test(req.query.start || "")) {
-      const start = req.query.start;
-      const end = DATE_RE.test(req.query.end || "") ? req.query.end : new Date().toISOString().slice(0, 10);
-      if ((new Date(end) - new Date(start)) / 86400000 > 370) {
-        return res.status(400).json({ error: "Range too large — max 370 days" });
-      }
-      const [ds, dr, sp] = await Promise.all([
-        getAll("daily_sleep", start, end),
-        getAll("daily_readiness", start, end),
-        getAll("sleep", start, end),
-      ]);
-      const days = joinByDay(ds, dr, sp);
-      const nights = Object.keys(days).sort()
-        .map(day => mapNight(day, days[day].ds, days[day].dr, days[day].period))
-        .filter(n => n.sleepScore != null || n.hoursSlept); // drop empty days
-      res.setHeader("Cache-Control", "no-store");
-      return res.status(200).json({ nights });
+    // ── Range mode (sleep backfill) ──
+    if (validDate(q.start)) {
+      const start = q.start;
+      const end = validDate(q.end) || todayIso();
+      if (rangeTooLarge(start, end)) return res.status(400).json({ error: `Range too large — max ${MAX_RANGE_DAYS} days` });
+      const { nights } = await fetchNights(token, start, end);
+      noStore();
+      // coverage lets the client say what Oura actually had, not just what
+      // the app added — the difference is the diagnosis when days are missing
+      return res.status(200).json({
+        nights,
+        coverage: {
+          requested: { start, end },
+          returned: nights.length,
+          first: nights[0]?.day || null,
+          last: nights[nights.length - 1]?.day || null,
+          withDetails: nights.filter(n => n.hoursSlept).length,
+        },
+      });
     }
 
     // ── Single-night mode (SYNC button) ──
-    const end = DATE_RE.test(req.query.date || "") ? req.query.date : new Date().toISOString().slice(0, 10);
+    const end = validDate(q.date) || todayIso();
     // Look back two days so a late sync or timezone offset still finds the night
-    const startD = new Date(end + "T12:00:00Z");
-    startD.setUTCDate(startD.getUTCDate() - 2);
-    const start = startD.toISOString().slice(0, 10);
-
-    const [ds, dr, sp] = await Promise.all([
-      getAll("daily_sleep", start, end),
-      getAll("daily_readiness", start, end),
-      getAll("sleep", start, end),
-    ]);
-    if (!ds.length && !dr.length && !sp.length) {
-      return res.status(404).json({ error: `No Oura data found for ${start}..${end} — has last night synced in the Oura app?` });
+    const { days } = await fetchNights(token, isoDaysAgo(2, end), end);
+    const dayKeys = Object.keys(days).sort();
+    if (!dayKeys.length) {
+      return res.status(404).json({ error: `No Oura data found for ${isoDaysAgo(2, end)}..${end} — has last night synced in the Oura app?` });
     }
-    const days = joinByDay(ds, dr, sp);
-    const day = Object.keys(days).sort().pop();
+    const day = dayKeys[dayKeys.length - 1];
     const d = days[day];
-    res.setHeader("Cache-Control", "no-store");
+    noStore();
     return res.status(200).json(mapNight(day, d.ds, d.dr, d.period));
   } catch (e) {
     return res.status(502).json({ error: String(e.message || e) });
