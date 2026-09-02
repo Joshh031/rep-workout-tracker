@@ -51,6 +51,17 @@ function breathSecondsOf(entry) {
 
 const fmtMMSS = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
+// Oura night (from /api/oura) -> the sleep form's string fields
+const nightToFields = (n) => {
+  const str = (v) => v != null ? String(v) : "";
+  return {
+    sleepScore: str(n.sleepScore), readiness: str(n.readiness),
+    hoursSlept: n.hoursSlept || "", rem: n.rem || "",
+    heartRate: str(n.heartRate), hrv: str(n.hrv),
+    respiratoryRate: str(n.respiratoryRate), wakeTime: n.wakeTime || "",
+  };
+};
+
 // Minutes between two "HH:MM" clock times; assumes forward order and
 // tolerates crossing midnight (e.g. alarm 23:50 -> gym 00:35).
 const minutesBetween = (a, b) => {
@@ -2128,17 +2139,12 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
       const r = await apiFetch(`/api/oura?date=${sleepDate}`);
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error || `Sync failed (${r.status})`);
-      setOura(o => ({
-        ...o,
-        sleepScore: d.sleepScore != null ? String(d.sleepScore) : o.sleepScore,
-        readiness: d.readiness != null ? String(d.readiness) : o.readiness,
-        hoursSlept: d.hoursSlept || o.hoursSlept,
-        rem: d.rem || o.rem,
-        heartRate: d.heartRate != null ? String(d.heartRate) : o.heartRate,
-        hrv: d.hrv != null ? String(d.hrv) : o.hrv,
-        respiratoryRate: d.respiratoryRate != null ? String(d.respiratoryRate) : o.respiratoryRate,
-        wakeTime: d.wakeTime || o.wakeTime,
-      }));
+      const f = nightToFields(d);
+      setOura(o => {
+        const next = { ...o };
+        for (const k of Object.keys(f)) if (f[k]) next[k] = f[k]; // synced values win; blanks keep what's there
+        return next;
+      });
       // Oura tells us which wake-day this night actually belongs to. If it
       // isn't the selected date (early sync before last night is processed,
       // Oura serves the previous night), move the date picker to match so
@@ -2178,19 +2184,19 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
       // Newest entry per date (log is newest-first)
       const byDate = new Map();
       sleepLog.forEach(s => { if (!byDate.has(s.date)) byDate.set(s.date, s); });
-      const str = (v) => v != null ? String(v) : "";
       const FIELDS = ["sleepScore", "readiness", "hoursSlept", "rem", "heartRate", "hrv", "respiratoryRate", "wakeTime"];
       const base = Date.now();
+      // What Oura actually held for the window — shown in the result so a
+      // gap in the app can be told apart from a gap in Oura's cloud
+      const cov = d.coverage;
+      const fmt = (iso) => iso ? new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "numeric", day: "numeric" }) : "?";
+      const coverageNote = cov
+        ? ` · Oura had ${cov.returned} night${cov.returned === 1 ? "" : "s"}${cov.returned ? ` (${fmt(cov.first)}–${fmt(cov.last)}, ${cov.withDetails} with details)` : " in this window"}`
+        : "";
 
       const toCreate = [], toRepair = [];
       (d.nights || []).forEach((n, i) => {
-        const fresh = {
-          sleepScore: str(n.sleepScore), readiness: str(n.readiness),
-          hoursSlept: n.hoursSlept || "", rem: n.rem || "",
-          heartRate: str(n.heartRate), hrv: str(n.hrv),
-          respiratoryRate: str(n.respiratoryRate),
-          wakeTime: n.wakeTime || "",
-        };
+        const fresh = nightToFields(n);
         const displayDate = new Date(n.day + "T12:00:00").toLocaleDateString();
         const existing = byDate.get(displayDate);
         if (!existing) {
@@ -2214,7 +2220,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
       });
 
       if (!toCreate.length && !toRepair.length) {
-        setBackfillMsg("✓ Nothing to do — every night in range is complete");
+        setBackfillMsg(`✓ Nothing to add — every night Oura has is already logged${coverageNote}`);
       } else {
         if (toCreate.length) await saveEntries(toCreate); // save first; UI updates on success
         await Promise.all(toRepair.map(u => updateEntry(u)));
@@ -2226,7 +2232,7 @@ function SleepTab({ sleepLog, setSleepLog, saveEntry, saveEntries, updateEntry, 
         const parts = [];
         if (toCreate.length) parts.push(`${toCreate.length} night${toCreate.length === 1 ? "" : "s"} added`);
         if (toRepair.length) parts.push(`${toRepair.length} repaired`);
-        setBackfillMsg(`✓ ${parts.join(" · ")}`);
+        setBackfillMsg(`✓ ${parts.join(" · ")}${coverageNote}`);
       }
     } catch (e) {
       setBackfillMsg(`✕ ${e.message || "Backfill failed"}`);
