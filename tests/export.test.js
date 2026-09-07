@@ -88,9 +88,11 @@ describe("/api/export", () => {
     let res = mockRes();
     await exportHandler({ method: "GET", headers: browser, query: { format: "csv", s: "pass" } }, res);
     assert.match(res.headers["Content-Type"], /^text\/html/);
+    assert.match(res.body, /SAVE FILE/);
     assert.match(res.body, /COPY ALL/);
     assert.match(res.body, /href="\/api\/export\?format=csv&amp;download=1&amp;s=pass"|href="\/api\/export\?format=csv&download=1&s=pass"/);
-    assert.match(res.body, /"Good Mornings, RDL style",1,10,225/); // data is in the textarea
+    assert.match(res.body, /Good Mornings, RDL style/); // data is embedded for the buttons
+    assert.ok(!/<textarea/.test(res.body), "no heavy textarea in the page");
     res = mockRes();
     await exportHandler({ method: "GET", headers: browser, query: { format: "csv", raw: "1" } }, res);
     assert.match(res.headers["Content-Type"], /^text\/plain/);
