@@ -3160,6 +3160,18 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
           <div style={{ marginBottom: 16 }}>
             <input style={{ ...g.input, fontSize: 13 }} placeholder="Search by date, type, score…" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
+          {/* Export: opens the download in a new tab so the passphrase-gated
+              API can serve it as a file (iOS then offers Share → Files). */}
+          <div style={{ ...g.card, padding: "10px 12px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 9, color: "#888", flex: 1, minWidth: 120, lineHeight: 1.5 }}>EXPORT WORKOUTS<br /><span style={{ color: "#666" }}>CSV = one row per set · JSON = full sessions incl. runs</span></span>
+            {[["csv", "⇣ CSV"], ["json", "⇣ JSON"]].map(([fmt, label]) => (
+              <button key={fmt} data-export={fmt}
+                onClick={() => window.open(`/api/export?format=${fmt}&s=${encodeURIComponent(getSecret())}`, "_blank")}
+                style={{ ...g.button, fontSize: 10, padding: "8px 12px", background: "#1a1a1a", color: "#ddd", border: "1px solid #333" }}>
+                {label}
+              </button>
+            ))}
+          </div>
           {filtered.length === 0 && (
             <div style={{ textAlign: "center", color: "#777", fontSize: 11, marginTop: 40 }}>No entries found</div>
           )}
