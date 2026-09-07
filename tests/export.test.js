@@ -82,6 +82,23 @@ describe("/api/export", () => {
     assert.equal(res.headers["Content-Disposition"], undefined);
     assert.equal(res.body.trim().split("\n").length, 4); // header + 3 legs sets
   });
+  test("a browser gets a copy/download page; raw=1 or non-browser clients get plain text", async () => {
+    f = stubFetch([["/rest/v1/workouts", () => [{ data: legs }]]]);
+    const browser = { accept: "text/html,application/xhtml+xml,*/*;q=0.8", "x-app-secret": "pass" };
+    let res = mockRes();
+    await exportHandler({ method: "GET", headers: browser, query: { format: "csv", s: "pass" } }, res);
+    assert.match(res.headers["Content-Type"], /^text\/html/);
+    assert.match(res.body, /COPY ALL/);
+    assert.match(res.body, /href="\/api\/export\?format=csv&amp;download=1&amp;s=pass"|href="\/api\/export\?format=csv&download=1&s=pass"/);
+    assert.match(res.body, /"Good Mornings, RDL style",1,10,225/); // data is in the textarea
+    res = mockRes();
+    await exportHandler({ method: "GET", headers: browser, query: { format: "csv", raw: "1" } }, res);
+    assert.match(res.headers["Content-Type"], /^text\/plain/);
+    res = mockRes();
+    await exportHandler({ method: "GET", headers: { accept: "*/*", "x-app-secret": "pass" }, query: { format: "csv" } }, res);
+    assert.match(res.headers["Content-Type"], /^text\/plain/);
+    assert.equal(res.body.trim().split("\n").length, 4);
+  });
   test("download=1 serves an attachment with the real MIME type", async () => {
     f = stubFetch([["/rest/v1/workouts", () => [{ data: legs }]]]);
     const res = mockRes();
