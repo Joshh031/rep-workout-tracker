@@ -15,12 +15,19 @@ import { buildExport } from "../src/export.js";
 const PAGE = 1000; // PostgREST's default max-rows
 
 const escapeHtml = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+// Data goes into the page as a JS string, not into the DOM: a textarea with
+// thousands of rows is what made the old page crawl on a phone.
+const jsString = (t) => JSON.stringify(t).replace(/<\//g, "<\\/");
 
-// A phone browser can't "select all" a huge plain-text page, so when a
-// browser (Accept: text/html) opens the link it gets a tiny page with
-// COPY ALL / DOWNLOAD buttons and the data in a textarea. Tools that fetch
-// the link (curl, requests, an LLM app) send */* and get the raw text.
-const htmlPage = ({ text, filename, count, unit }, downloadUrl) => `<!doctype html>
+// When a browser (Accept: text/html) opens the link it gets a light page:
+// a short preview plus SAVE FILE (share sheet → Save to Files / AirDrop),
+// COPY ALL (clipboard) and DOWNLOAD. Tools that fetch the link (curl,
+// requests, an LLM app) send */* and get the raw text.
+const htmlPage = ({ text, filename, mime, count, unit }, downloadUrl) => {
+  const lines = text.split("\n");
+  const preview = lines.slice(0, 12).join("\n");
+  const more = Math.max(0, lines.length - 13);
+  return `<!doctype html>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${filename}</title>
 <style>
@@ -29,26 +36,49 @@ const htmlPage = ({ text, filename, count, unit }, downloadUrl) => `<!doctype ht
   .meta{font-size:11px;color:#888;margin-bottom:12px}
   .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
   button,a.btn{background:#1a1a1a;color:#ddd;border:1px solid #333;border-radius:8px;padding:12px 16px;font:inherit;font-size:12px;text-decoration:none;cursor:pointer}
+  button.primary{background:#ff4d00;color:#000;border-color:#ff4d00;font-weight:600}
   #msg{font-size:11px;color:#3a9e4f;min-height:16px;margin-bottom:8px}
-  textarea{width:100%;height:60vh;box-sizing:border-box;background:#111;color:#bbb;border:1px solid #222;border-radius:8px;padding:10px;font:11px ui-monospace,Menlo,monospace;white-space:pre;overflow:auto}
+  pre{background:#111;color:#999;border:1px solid #222;border-radius:8px;padding:10px;font-size:11px;overflow:auto;margin:0}
+  .more{font-size:11px;color:#666;margin-top:6px}
 </style>
 <h1>REP EXPORT</h1>
 <div class="meta">${filename} · ${count} ${unit}</div>
 <div class="row">
+  <button id="save" class="primary">⇡ SAVE FILE</button>
   <button id="copy">⎘ COPY ALL</button>
-  <a class="btn" href="${downloadUrl}">⇣ DOWNLOAD</a>
+  <a class="btn" id="dl" href="${downloadUrl}">⇣ DOWNLOAD</a>
 </div>
 <div id="msg"></div>
-<textarea id="data" readonly>${escapeHtml(text)}</textarea>
+<pre>${escapeHtml(preview)}</pre>
+${more ? `<div class="more">… ${more} more rows in the file</div>` : ""}
 <script>
-  const ta = document.getElementById("data"), msg = document.getElementById("msg");
+  const DATA = ${jsString(text)}, NAME = ${jsString(filename)}, MIME = ${jsString(mime)};
+  const msg = document.getElementById("msg"), say = (t) => { msg.textContent = t; };
+  const file = () => new File([DATA], NAME, { type: MIME });
+  const save = document.getElementById("save");
+  if (!(navigator.canShare && navigator.canShare({ files: [file()] }))) {
+    // No share sheet here (desktop browser): SAVE FILE just downloads
+    save.onclick = () => { document.getElementById("dl").click(); };
+  } else {
+    save.onclick = () => {
+      navigator.share({ files: [file()], title: NAME })
+        .then(() => say("✓ saved — pick Save to Files, AirDrop, or an app in the sheet"))
+        .catch(e => { if (e.name !== "AbortError") say("✗ " + e.message); });
+    };
+  }
   document.getElementById("copy").onclick = () => {
-    const done = () => { msg.textContent = "✓ copied ${count} ${unit} — paste into your analysis tool"; };
-    const fallback = () => { ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length); document.execCommand("copy") ? done() : (msg.textContent = "✗ copy blocked — long-press the text and choose Select All"); };
-    (navigator.clipboard?.writeText ? navigator.clipboard.writeText(ta.value).then(done, fallback) : fallback());
+    const done = () => say("✓ copied ${count} ${unit} — paste into your analysis tool");
+    const fallback = () => {
+      const ta = document.createElement("textarea"); ta.value = DATA; document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, DATA.length);
+      const ok = document.execCommand("copy"); ta.remove();
+      ok ? done() : say("✗ copy blocked by the browser — use SAVE FILE instead");
+    };
+    navigator.clipboard?.writeText ? navigator.clipboard.writeText(DATA).then(done, fallback) : fallback();
   };
 </script>
 `;
+};
 
 export default async function handler(req, res) {
   if (!checkAuth(req, res)) return;
