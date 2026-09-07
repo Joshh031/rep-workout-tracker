@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { normalizeName, findLastMatch, compareSets } from "./compare.js";
 import { parseWorkoutText } from "./parse.js";
+import { buildExport } from "./export.js";
 
 const EXERCISE_DB = {
   chest:     { staples: ["Bench Press", "Incline Bench", "Cable Fly", "Dumbbell Press", "Push-Up"], alternatives: ["Decline Bench", "Pec Deck", "Landmine Press", "Dips", "Cable Crossover", "Chest Pullover", "Floor Press", "Svend Press"] },
@@ -2936,8 +2937,40 @@ function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog,
   const [progressType, setProgressType] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [exportMsg, setExportMsg] = useState("");
 
-
+  // Export is built from the sessions already in memory, so every action
+  // below runs synchronously inside the tap — iOS only allows the share
+  // sheet and clipboard writes during a user gesture.
+  const shareExport = (format) => {
+    const { text, filename, mime, count, unit } = buildExport(history, format);
+    try {
+      const file = new File([text], filename, { type: mime });
+      if (navigator.canShare?.({ files: [file] })) {
+        navigator.share({ files: [file], title: filename })
+          .then(() => setExportMsg(`✓ shared ${count} ${unit}`))
+          .catch(e => setExportMsg(e.name === "AbortError" ? "" : `✗ ${e.message}`));
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      const a = Object.assign(document.createElement("a"), { href: url, download: filename });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      setExportMsg(`✓ downloaded ${filename} (${count} ${unit})`);
+    } catch (e) { setExportMsg(`✗ ${e.message}`); }
+  };
+  const copyExport = (format) => {
+    const { text, count, unit } = buildExport(history, format);
+    navigator.clipboard.writeText(text)
+      .then(() => setExportMsg(`✓ copied ${count} ${unit} — paste into your analysis tool`))
+      .catch(e => setExportMsg(`✗ ${e.message}`));
+  };
+  const copyLink = () => {
+    const url = `${window.location.origin}/api/export?format=csv&s=${encodeURIComponent(getSecret())}`;
+    navigator.clipboard.writeText(url)
+      .then(() => setExportMsg("✓ link copied — it includes your passphrase, so treat it like a password"))
+      .catch(e => setExportMsg(`✗ ${e.message}`));
+  };
 
   const all = [
     ...history.map(h => ({ ...h, _kind: "workout" })),
@@ -3160,17 +3193,25 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
           <div style={{ marginBottom: 16 }}>
             <input style={{ ...g.input, fontSize: 13 }} placeholder="Search by date, type, score…" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          {/* Export: opens the download in a new tab so the passphrase-gated
-              API can serve it as a file (iOS then offers Share → Files). */}
-          <div style={{ ...g.card, padding: "10px 12px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 9, color: "#888", flex: 1, minWidth: 120, lineHeight: 1.5 }}>EXPORT WORKOUTS<br /><span style={{ color: "#666" }}>CSV = one row per set · JSON = full sessions incl. runs</span></span>
-            {[["csv", "⇣ CSV"], ["json", "⇣ JSON"]].map(([fmt, label]) => (
-              <button key={fmt} data-export={fmt}
-                onClick={() => window.open(`/api/export?format=${fmt}&s=${encodeURIComponent(getSecret())}`, "_blank")}
-                style={{ ...g.button, fontSize: 10, padding: "8px 12px", background: "#1a1a1a", color: "#ddd", border: "1px solid #333" }}>
-                {label}
-              </button>
-            ))}
+          {/* Export: share sheet / clipboard, built from in-memory data */}
+          <div style={{ ...g.card, padding: "10px 12px", marginBottom: 16 }}>
+            <div style={{ fontSize: 9, color: "#888", letterSpacing: 1, marginBottom: 8 }}>EXPORT WORKOUTS <span style={{ color: "#666", letterSpacing: 0 }}>· CSV = one row per set · JSON = full sessions incl. runs</span></div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[
+                ["share-csv", "⇡ SHARE CSV", () => shareExport("csv")],
+                ["share-json", "⇡ SHARE JSON", () => shareExport("json")],
+                ["copy-csv", "⎘ COPY CSV", () => copyExport("csv")],
+                ["copy-link", "🔗 COPY LINK", copyLink],
+              ].map(([key, label, fn]) => (
+                <button key={key} data-export={key} onClick={fn} disabled={!history.length}
+                  style={{ ...g.button, fontSize: 10, padding: "8px 10px", background: "#1a1a1a", color: "#ddd", border: "1px solid #333", opacity: history.length ? 1 : 0.4 }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {exportMsg && (
+              <div style={{ fontSize: 9, color: exportMsg.startsWith("✓") ? "#3a9e4f" : "#c0392b", marginTop: 8, lineHeight: 1.5 }}>{exportMsg}</div>
+            )}
           </div>
           {filtered.length === 0 && (
             <div style={{ textAlign: "center", color: "#777", fontSize: 11, marginTop: 40 }}>No entries found</div>

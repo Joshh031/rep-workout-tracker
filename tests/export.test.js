@@ -1,7 +1,8 @@
 import { test, describe, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { mockRes, stubFetch } from "./helpers.js";
-import exportHandler, { isoDate, dedupeSessions, sessionsToCsv, sessionsToJson } from "../api/export.js";
+import { isoDate, sortSessions, sessionsToCsv, sessionsToJson, buildExport } from "../src/export.js";
+import exportHandler from "../api/export.js";
 
 const legs = {
   id: 2, date: "7/15/2026", type: "legs",
@@ -21,15 +22,13 @@ describe("export helpers", () => {
     assert.equal(isoDate("12/25/2026"), "2026-12-25");
     assert.equal(isoDate("garbage"), "garbage");
   });
-  test("dedupeSessions keeps the newest copy of an id and sorts by date", () => {
-    const rows = [{ data: { ...legs, type: "old" } }, { data: pushups }, { data: run }, { data: legs }];
-    const out = dedupeSessions(rows);
+  test("sortSessions keeps the newest copy of an id and sorts by date", () => {
+    const out = sortSessions([{ ...legs, type: "old" }, pushups, run, legs]);
     assert.deepEqual(out.map(s => s.id), [1, 2, 3]);
     assert.equal(out[1].type, "legs");
   });
   test("CSV is one row per filled set, quotes commas, skips runs and blanks", () => {
-    const csv = sessionsToCsv([run, legs, pushups]);
-    const lines = csv.trim().split("\n");
+    const lines = sessionsToCsv([run, legs, pushups]).trim().split("\n");
     assert.equal(lines[0], "date,session_id,type,exercise,set_number,reps,weight,alarm_set,arrived_gym,final_set,sauna");
     assert.deepEqual(lines.slice(1), [
       "2026-07-15,2,legs,Belt Squat,1,8,225,05:45,06:25,07:30,yes",
@@ -45,6 +44,15 @@ describe("export helpers", () => {
     assert.equal(out[1].exercises.length, 2);
     assert.equal(out[1].timing.sauna, true);
   });
+  test("buildExport reports what it produced", () => {
+    const csv = buildExport([pushups, legs, run], "csv");
+    assert.equal(csv.count, 4);
+    assert.equal(csv.unit, "sets");
+    assert.match(csv.filename, /^rep-workouts-\d{4}-\d{2}-\d{2}\.csv$/);
+    const json = buildExport([pushups, legs, run], "json");
+    assert.equal(json.count, 3);
+    assert.equal(JSON.parse(json.text).sessions[0].id, 1);
+  });
 });
 
 describe("/api/export", () => {
@@ -55,30 +63,36 @@ describe("/api/export", () => {
     process.env.SUPABASE_SERVICE_KEY = "sb_secret_abc";
   });
   afterEach(() => f?.restore());
+  const H = { "x-app-secret": "pass" };
 
-  test("pages through Supabase and returns a CSV attachment", async () => {
+  test("pages through Supabase and renders CSV inline as text by default", async () => {
     let call = 0;
     f = stubFetch([["/rest/v1/workouts", () => {
       call++;
-      // first page "full" (1000 rows of the same run), second page has the legs session
-      return call === 1
-        ? Array.from({ length: 1000 }, () => ({ data: run }))
-        : [{ data: legs }];
+      return call === 1 ? Array.from({ length: 1000 }, () => ({ data: run })) : [{ data: legs }];
     }]]);
     const res = mockRes();
-    await exportHandler({ method: "GET", headers: { "x-app-secret": "pass" }, query: { format: "csv", user_id: "user_x" } }, res);
+    await exportHandler({ method: "GET", headers: H, query: { format: "csv", user_id: "user_x" } }, res);
     assert.equal(res.statusCode, 200);
     assert.equal(call, 2);
     assert.equal(f.calls[0].headers.Range, "0-999");
     assert.equal(f.calls[1].headers.Range, "1000-1999");
     assert.match(f.calls[0].url, /user_id=eq\.user_x/);
-    assert.match(res.headers["Content-Disposition"], /attachment; filename="rep-workouts-\d{4}-\d{2}-\d{2}\.csv"/);
+    assert.match(res.headers["Content-Type"], /^text\/plain/);
+    assert.equal(res.headers["Content-Disposition"], undefined);
     assert.equal(res.body.trim().split("\n").length, 4); // header + 3 legs sets
+  });
+  test("download=1 serves an attachment with the real MIME type", async () => {
+    f = stubFetch([["/rest/v1/workouts", () => [{ data: legs }]]]);
+    const res = mockRes();
+    await exportHandler({ method: "GET", headers: H, query: { format: "csv", download: "1" } }, res);
+    assert.match(res.headers["Content-Type"], /^text\/csv/);
+    assert.match(res.headers["Content-Disposition"], /attachment; filename="rep-workouts-\d{4}-\d{2}-\d{2}\.csv"/);
   });
   test("json format wraps sessions with an export timestamp", async () => {
     f = stubFetch([["/rest/v1/workouts", () => [{ data: legs }]]]);
     const res = mockRes();
-    await exportHandler({ method: "GET", headers: { "x-app-secret": "pass" }, query: { format: "json" } }, res);
+    await exportHandler({ method: "GET", headers: H, query: { format: "json" } }, res);
     const parsed = JSON.parse(res.body);
     assert.equal(parsed.sessions.length, 1);
     assert.ok(parsed.exportedAt);
