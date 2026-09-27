@@ -1846,6 +1846,101 @@ Return only JSON, no explanation.` }]
   );
 }
 
+// ── PUSH REMINDERS ────────────────────────────────────────────────────────
+// Web Push: the browser hands us a subscription (endpoint + keys), the
+// server stores it, and a Vercel cron sends a nudge at 8am / 8pm when
+// something is missing. On iPhone this only works from the Home Screen app.
+const urlB64ToUint8 = (b64) => {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+};
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
+const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true;
+
+function ReminderCard() {
+  const supported = typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const [state, setState] = useState("checking"); // checking | off | on | blocked | unsupported | needs-homescreen | busy
+  const [msg, setMsg] = useState("");
+
+  const refresh = async () => {
+    if (!supported) { setState(isIOS() && !isStandalone() ? "needs-homescreen" : "unsupported"); return; }
+    if (Notification.permission === "denied") { setState("blocked"); return; }
+    try {
+      const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+      const sub = await reg?.pushManager.getSubscription();
+      setState(sub ? "on" : "off");
+    } catch (e) { setState("off"); }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const enable = async () => {
+    setMsg(""); setState("busy");
+    try {
+      const cfg = await (await apiFetch("/api/push?config=1")).json();
+      if (!cfg.enabled) throw new Error("Server isn't set up for push yet (VAPID keys missing in Vercel)");
+      // Permission must be requested inside the tap
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") { setState(perm === "denied" ? "blocked" : "off"); return; }
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(cfg.publicKey) });
+      const r = await apiFetch("/api/push", { method: "POST", body: JSON.stringify({ subscription: sub.toJSON(), user_id: getUserId() }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Save failed (${r.status})`);
+      setState("on"); setMsg("✓ Reminders on — 8am & 8pm on days with something missing");
+    } catch (e) { setState("off"); setMsg(`✗ ${e.message}`); }
+  };
+  const disable = async () => {
+    setMsg(""); setState("busy");
+    try {
+      const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+      const sub = await reg?.pushManager.getSubscription();
+      if (sub) {
+        await apiFetch("/api/push", { method: "DELETE", body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {});
+        await sub.unsubscribe();
+      }
+      setState("off"); setMsg("Reminders off");
+    } catch (e) { setState("on"); setMsg(`✗ ${e.message}`); }
+  };
+  const sendTest = async () => {
+    setMsg("");
+    try {
+      const d = await (await apiFetch("/api/push?test=1")).json();
+      setMsg(d.sent ? `✓ test sent to ${d.sent} device${d.sent === 1 ? "" : "s"} — check your lock screen` : `✗ ${d.error || d.reason || "nothing sent"}`);
+    } catch (e) { setMsg(`✗ ${e.message}`); }
+  };
+
+  const text = {
+    checking: "…",
+    on: "ON · 8am & 8pm on days with something missing",
+    off: "OFF · get a nudge on days you haven't logged",
+    blocked: "BLOCKED · allow notifications for REP in iPhone Settings",
+    unsupported: "not supported in this browser",
+    "needs-homescreen": "add REP to your Home Screen (Share → Add to Home Screen) and open it from there",
+    busy: "…",
+  }[state];
+
+  return (
+    <div style={{ ...g.card, padding: "12px 14px", marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 9, letterSpacing: 2, color: "#888", textTransform: "uppercase", flex: 1, minWidth: 140, lineHeight: 1.6 }}>
+          🔔 Reminders <span style={{ color: state === "on" ? "#3a9e4f" : state === "blocked" ? "#c0392b" : "#666", textTransform: "none", letterSpacing: 0 }}>· {text}</span>
+        </span>
+        {(state === "off" || state === "on" || state === "busy") && (
+          <div style={{ display: "flex", gap: 6 }}>
+            {state === "on" && <button data-reminder="test" onClick={sendTest} style={{ ...g.ghost }}>TEST</button>}
+            <button data-reminder={state === "on" ? "disable" : "enable"} onClick={state === "on" ? disable : enable} disabled={state === "busy"}
+              style={{ ...g.ghost, color: state === "on" ? "#888" : "#ff4d00", borderColor: state === "on" ? "#252525" : "#ff4d00" }}>
+              {state === "busy" ? "…" : state === "on" ? "TURN OFF" : "ENABLE"}
+            </button>
+          </div>
+        )}
+      </div>
+      {msg && <div style={{ fontSize: 9, color: msg.startsWith("✓") ? "#3a9e4f" : msg.startsWith("✗") ? "#c0392b" : "#888", marginTop: 8, lineHeight: 1.5 }}>{msg}</div>}
+    </div>
+  );
+}
+
 // ── DAILY TAB ──────────────────────────────────────────────────────────────
 function DailyTab({ dailyLog, setDailyLog, saveEntry, saveEntries, updateEntry, history, sleepLog }) {
   const todayStr = () => new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD for input
@@ -2002,6 +2097,8 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, saveEntries, updateEntry, 
           style={{ background: "none", border: "none", color: logDate === todayStr() ? "#888" : "#ff4d00", fontFamily: "'DM Mono', monospace", fontSize: 11, outline: "none", textAlign: "right", cursor: "pointer" }}
         />
       </div>
+
+      <ReminderCard />
 
       {/* Voice */}
       <VoiceFill tab="daily" onFill={(parsed) => {
@@ -3368,8 +3465,13 @@ function getUserId() {
 }
 
 // ── ROOT ───────────────────────────────────────────────────────────────────
+const TAB_KEYS = ["workout", "daily", "sleep", "history"];
 export default function App() {
-  const [tab, setTab] = useState("workout");
+  // A tapped reminder opens /?tab=daily etc.
+  const [tab, setTab] = useState(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
+    return TAB_KEYS.includes(t) ? t : "workout";
+  });
   const [loading, setLoading] = useState(true);
   const userId = getUserId();
 

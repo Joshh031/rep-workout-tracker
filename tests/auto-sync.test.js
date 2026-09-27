@@ -39,6 +39,7 @@ const routes = (db = DB) => [
   [/sleep_logs\?user_id=eq\.user_x&select=data/, () => db.sleep],
   [/daily_logs\?user_id=eq\.user_x&select=data/, () => db.daily],
   [/rest\/v1\/(sleep_logs|daily_logs)/, () => ({ ok: true, status: 201, json: async () => ({}) })],
+  [/\/api\/push\?send=am/, () => ({ slot: "am", sent: 1 })],
 ];
 
 describe("/api/auto-sync", () => {
@@ -47,6 +48,7 @@ describe("/api/auto-sync", () => {
     process.env.OURA_TOKEN = "tok";
     process.env.SUPABASE_URL = "https://x.supabase.co";
     process.env.SUPABASE_SERVICE_KEY = "sb_secret_abc";
+    process.env.APP_SECRET = "pass";
     delete process.env.CRON_SECRET;
   });
   afterEach(() => f?.restore());
@@ -55,9 +57,12 @@ describe("/api/auto-sync", () => {
   test("creates missing nights, repairs partial ones, fills steps, skips today", async () => {
     f = stubFetch(routes());
     const res = mockRes();
-    await autoSync({ headers: {} }, res);
+    await autoSync({ headers: { host: "rep.test" } }, res);
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
-    assert.deepEqual({ ...res.body, range: undefined }, { range: undefined, nightsFromOura: 3, sleepAdded: 1, sleepRepaired: 1, stepsAdded: 1, stepsFilled: 1 });
+    assert.deepEqual({ ...res.body, range: undefined }, { range: undefined, nightsFromOura: 3, sleepAdded: 1, sleepRepaired: 1, stepsAdded: 1, stepsFilled: 1, reminder: { slot: "am", sent: 1 } });
+    const push = f.calls.find(c => c.url.includes("/api/push"));
+    assert.equal(push.url, "https://rep.test/api/push?send=am");
+    assert.equal(push.headers["x-app-secret"], "pass");
 
     const w = writes();
     const sleepPost = w.find(c => c.method === "POST" && c.url.endsWith("/sleep_logs"));
@@ -97,7 +102,7 @@ describe("/api/auto-sync", () => {
     await autoSync({ headers: {} }, res);
     assert.equal(res.statusCode, 200);
     assert.deepEqual(writes(), []);
-    assert.deepEqual({ ...res.body, range: undefined }, { range: undefined, nightsFromOura: 3, sleepAdded: 0, sleepRepaired: 0, stepsAdded: 0, stepsFilled: 0 });
+    assert.deepEqual({ ...res.body, range: undefined, reminder: undefined }, { range: undefined, reminder: undefined, nightsFromOura: 3, sleepAdded: 0, sleepRepaired: 0, stepsAdded: 0, stepsFilled: 0 });
   });
 
   test("honours CRON_SECRET when set", async () => {

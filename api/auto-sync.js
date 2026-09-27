@@ -99,8 +99,21 @@ export default async function handler(req, res) {
       }
     }
 
+    // Morning reminder rides on this cron (Hobby plans allow two crons):
+    // it runs after the sync so a night Oura just filled in isn't nagged about.
+    let reminder = null;
+    if (!req.query?.noRemind) {
+      try {
+        const host = req.headers?.host;
+        const r = await fetch(`https://${host}/api/push?send=am`, {
+          headers: { "x-app-secret": process.env.APP_SECRET || "", ...(process.env.CRON_SECRET ? { authorization: `Bearer ${process.env.CRON_SECRET}` } : {}) },
+        });
+        reminder = await r.json();
+      } catch (e) { reminder = { error: String(e.message || e) }; }
+    }
+
     res.setHeader("Cache-Control", "no-store");
-    return res.status(200).json({ range: { start, end }, nightsFromOura: nights.length, sleepAdded, sleepRepaired, stepsAdded, stepsFilled });
+    return res.status(200).json({ range: { start, end }, nightsFromOura: nights.length, sleepAdded, sleepRepaired, stepsAdded, stepsFilled, reminder });
   } catch (e) {
     return res.status(502).json({ error: String(e.message || e) });
   }
