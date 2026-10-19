@@ -37,9 +37,13 @@ export default async function handler(req,res){
   const parsed=parseWorkoutText(text);
   if(!parsed||!parsed.exercises.length)return json(res,422,{error:'Ambiguous format: use one exercise per line, e.g. Bayesian curls 3x10x20. No records were saved.'});
   const id='gpt-'+createHash('sha256').update(idempotencyKey).digest('hex').slice(0,24);
+  const contentHash=createHash('sha256').update(JSON.stringify({date,type,text})).digest('hex');
   const existing=await database('workouts',new URLSearchParams({user_id:'eq.'+uid,'data->>id':'eq.'+id,limit:'1'}),'GET');
-  if(existing.length)return json(res,200,{saved:true,duplicate:true,workout:existing[0].data});
-  const entry={id,date:new Date(date+'T12:00:00').toLocaleDateString('en-US'),type,exercises:parsed.exercises,source:'chatgpt'};
+  if(existing.length){
+    if(existing[0].data?.contentHash!==contentHash)return json(res,409,{error:'Idempotency key already used for a different workout'});
+    return json(res,200,{saved:true,duplicate:true,workout:existing[0].data});
+  }
+  const entry={id,date:new Date(date+'T12:00:00').toLocaleDateString('en-US'),type,exercises:parsed.exercises,source:'chatgpt',contentHash};
   const rows=await database('workouts','', 'POST',{user_id:uid,data:entry});
   return json(res,201,{saved:true,workout:rows[0]?.data||entry});
  }catch(e){return json(res,500,{error:'Workout API operation failed'});}
