@@ -33,6 +33,7 @@ export function normalizeName(name) {
   // original data remains intact. Machine/equipment variants are not assumed
   // equivalent unless deliberately listed here.
   const alias = raw.replace(/\biso[ -]?lateral\b/g, "isolateral").replace(/[.,:;]+$/g, "").trim();
+  if (/^(?:tricep|triceps) (?:pushdown|pulldown|push down|pull down)s?$/.test(alias)) return "tricepspushdown";
   if (/^isolateral (?:back )?row$/.test(alias)) return "isolateralrow";
   if (/^(?:lower back extension(?: machine)?|lower back extensions?|back extension(?: machine)?|back extensions?)$/.test(alias)) return "backextension";
   // A parser artifact like "x245;" is not an exercise name.
