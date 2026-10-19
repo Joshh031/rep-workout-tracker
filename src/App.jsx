@@ -725,7 +725,7 @@ Cover, in flowing prose: (1) overall verdict vs the last ${modal.readoutCtx.body
           </div>
         )}
         {/* Coach readout */}
-        {modal.readoutCtx && (
+        {false && modal.readoutCtx && (
           <div style={{ background: "#0e0e14", border: "1px solid #22222e", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
             <div style={{ fontSize: 8, letterSpacing: 2, color: "#8a8ac4", textTransform: "uppercase", marginBottom: 8 }}>⚡ Coach Readout</div>
             {readoutState === "loading" && (
@@ -2963,7 +2963,7 @@ Keep it under 200 words. Be a tough but fair coach.`;
 // ── HISTORY TAB ───────────────────────────────────────────────────────────
 function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog, deleteDaily, sleepLog, setSleepLog, deleteSleep }) {
   const [search, setSearch] = useState("");
-  const [view, setView] = useState("log"); // "log" | "insights" | "progress"
+  const [view, setView] = useState("insights"); // default to useful quantitative progress
   const [progressType, setProgressType] = useState(null);
   const [insightExercise,setInsightExercise] = useState("");
   const [analysis, setAnalysis] = useState(null);
@@ -3021,8 +3021,15 @@ function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog,
   });
 
   const recentTraining=trainingSummary(history,28);
-  const insightNames=[...new Set(history.flatMap(w=>(w.exercises||[]).map(e=>e.name).filter(Boolean)))].sort();
-  const selectedInsight=insightExercise||insightNames[0]||"";
+  const insightMap = new Map();
+  history.forEach(w => (w.exercises || []).forEach(e => {
+    const key = normalizeName(e.name);
+    if (key && !insightMap.has(key)) insightMap.set(key, e.name);
+  }));
+  const insightNames = [...insightMap.values()].sort((a,b)=>a.localeCompare(b));
+  const selectedInsightKey = normalizeName(insightExercise);
+  const selectedCanonicalName = insightNames.find(n => normalizeName(n)===selectedInsightKey);
+  const selectedInsight=selectedCanonicalName||insightNames[0]||"";
   const exerciseTrend=selectedInsight?strengthTrends(history,selectedInsight,12):[];
   const suggestedTarget=selectedInsight?nextTarget(history,selectedInsight):null;
 
@@ -3083,14 +3090,14 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
     <div style={g.page}>
       {/* View toggle */}
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-        {["log", "insights", "prs", "progress", "heatmap", "scorecard"].map(v => (
+        {["insights", "log", "prs", "heatmap", "scorecard"].map(v => (
           <button key={v} onClick={() => setView(v)} style={{
             flex: 1, padding: "8px 0", borderRadius: 8, cursor: "pointer", minWidth: 48,
             fontFamily: "'DM Mono', monospace", fontSize: 7, letterSpacing: 1, textTransform: "uppercase",
             border: `1px solid ${view === v ? "#ff4d00" : "#2a2a2a"}`,
             background: view === v ? "#ff4d00" : "#1c1c1c",
             color: view === v ? "#fff" : "#777", fontWeight: view === v ? 700 : 400
-          }}>{v === "insights" ? "INSIGHTS" : v === "progress" ? "AI ✦" : v === "heatmap" ? "MAP ◈" : v === "scorecard" ? "WEEK ⚡" : v === "prs" ? "PR 🏆" : "LOG"}</button>
+          }}>{v === "insights" ? "OVERVIEW" : v === "progress" ? "AI ✦" : v === "heatmap" ? "MAP ◈" : v === "scorecard" ? "WEEK ⚡" : v === "prs" ? "PR 🏆" : "LOG"}</button>
         ))}
       </div>
 
@@ -3208,8 +3215,8 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
         );
       })()}
 
-      {/* PROGRESS VIEW */}
-      {view === "progress" && (
+      {/* Legacy in-app AI analysis is retired; coaching stays in Workout Goals. */}
+      {false && view === "progress" && (
         <div>
           <span style={g.label}>AI Coach — Select Workout</span>
           {workoutTypes.length === 0 && (
@@ -3444,14 +3451,15 @@ function getUserId() {
 }
 
 // ── ROOT ───────────────────────────────────────────────────────────────────
-const TAB_KEYS = ["workout", "daily", "sleep", "history"];
+const TAB_KEYS = ["workout", "progress", "recovery", "daily", "sleep", "history"];
 export default function App() {
   // A tapped reminder opens /?tab=daily etc.
   const [tab, setTab] = useState(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    return TAB_KEYS.includes(t) ? t : "workout";
+    return t === "daily" || t === "sleep" ? "recovery" : t === "history" ? "progress" : TAB_KEYS.includes(t) ? t : "workout";
   });
   const [loading, setLoading] = useState(true);
+  const [recoveryView,setRecoveryView] = useState("oura");
   const userId = getUserId();
 
   const [history, setHistory] = useState([]);
@@ -3600,9 +3608,8 @@ export default function App() {
 
   const TABS = [
     { key: "workout", label: "WORKOUT", flex: 2 },
-    { key: "daily",   label: "DAILY",   flex: 1 },
-    { key: "sleep",   label: "SLEEP",   flex: 1 },
-    { key: "history", label: "HISTORY", flex: 1 },
+    { key: "progress", label: "PROGRESS", flex: 1 },
+    { key: "recovery", label: "RECOVERY", flex: 1 },
   ];
 
   if (locked) {
@@ -3662,10 +3669,16 @@ export default function App() {
           </div>
         ) : (
           <>
-            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} updateDailyEntry={updateDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} needsBreathing={needsBreathing} onGoToDaily={() => setTab("daily")} onGoToHistory={() => setTab("history")} />}
-            {tab === "daily"   && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} saveEntries={saveDailyEntries} updateEntry={updateDailyEntry} history={history} sleepLog={sleepLog} />}
-            {tab === "sleep"   && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} saveEntries={saveSleepEntries} updateEntry={updateSleepEntry} history={history} dailyLog={dailyLog} />}
-            {tab === "history" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
+            {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} updateDailyEntry={updateDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} needsBreathing={needsBreathing} onGoToDaily={() => {setTab("recovery");setRecoveryView("daily");}} onGoToHistory={() => setTab("progress")} />}
+            {tab === "recovery" && <div style={{display:"flex",gap:8,padding:"8px 16px"}}>
+              {[["oura","Oura · Sleep"],["daily","Steps & Routine"]].map(([key,label])=>(
+                <button key={key} onClick={()=>setRecoveryView(key)}
+                  style={{...g.ghost,flex:1,borderColor:recoveryView===key?"#ff4d00":"#303030",color:recoveryView===key?"#ff4d00":"#aaa"}}>{label}</button>
+              ))}
+            </div>}
+            {tab === "recovery" && recoveryView === "daily" && <DailyTab   dailyLog={dailyLog} setDailyLog={setDailyLog} saveEntry={saveDailyEntry} saveEntries={saveDailyEntries} updateEntry={updateDailyEntry} history={history} sleepLog={sleepLog} />}
+            {tab === "recovery" && recoveryView === "oura" && <SleepTab   sleepLog={sleepLog} setSleepLog={setSleepLog} saveEntry={saveSleepEntry} saveEntries={saveSleepEntries} updateEntry={updateSleepEntry} history={history} dailyLog={dailyLog} />}
+            {tab === "progress" && <HistoryTab history={history} setHistory={setHistory} deleteWorkout={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} deleteDaily={deleteDailyEntry} sleepLog={sleepLog} setSleepLog={setSleepLog} deleteSleep={deleteSleepEntry} />}
           </>
         )}
       </div>
