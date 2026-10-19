@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { normalizeName, findLastMatch, compareSets } from "./compare.js";
 import { parseWorkoutText } from "./parse.js";
+import { trainingSummary, strengthTrends, nextTarget } from "./analytics.js";
 import { buildExport } from "./export.js";
 
 const EXERCISE_DB = {
@@ -3030,8 +3031,9 @@ Keep it under 200 words. Be a tough but fair coach.`;
 // ── HISTORY TAB ───────────────────────────────────────────────────────────
 function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog, deleteDaily, sleepLog, setSleepLog, deleteSleep }) {
   const [search, setSearch] = useState("");
-  const [view, setView] = useState("log"); // "log" | "progress"
+  const [view, setView] = useState("log"); // "log" | "insights" | "progress"
   const [progressType, setProgressType] = useState(null);
+  const [insightExercise,setInsightExercise] = useState("");
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [exportMsg, setExportMsg] = useState("");
@@ -3085,6 +3087,12 @@ function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog,
     if (e._kind === "daily") return e.date?.includes(q);
     return true;
   });
+
+  const recentTraining=trainingSummary(history,28);
+  const insightNames=[...new Set(history.flatMap(w=>(w.exercises||[]).map(e=>e.name).filter(Boolean)))].sort();
+  const selectedInsight=insightExercise||insightNames[0]||"";
+  const exerciseTrend=selectedInsight?strengthTrends(history,selectedInsight,12):[];
+  const suggestedTarget=selectedInsight?nextTarget(history,selectedInsight):null;
 
   // Workout types with enough data for analysis (5+ sessions)
   const workoutTypes = WORKOUT_TYPES.filter(t => history.filter(h => h.type === t).length >= 3);
@@ -3143,16 +3151,55 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
     <div style={g.page}>
       {/* View toggle */}
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-        {["log", "prs", "progress", "heatmap", "scorecard"].map(v => (
+        {["log", "insights", "prs", "progress", "heatmap", "scorecard"].map(v => (
           <button key={v} onClick={() => setView(v)} style={{
             flex: 1, padding: "8px 0", borderRadius: 8, cursor: "pointer", minWidth: 48,
             fontFamily: "'DM Mono', monospace", fontSize: 7, letterSpacing: 1, textTransform: "uppercase",
             border: `1px solid ${view === v ? "#ff4d00" : "#2a2a2a"}`,
             background: view === v ? "#ff4d00" : "#1c1c1c",
             color: view === v ? "#fff" : "#777", fontWeight: view === v ? 700 : 400
-          }}>{v === "progress" ? "AI ✦" : v === "heatmap" ? "MAP ◈" : v === "scorecard" ? "WEEK ⚡" : v === "prs" ? "PR 🏆" : "LOG"}</button>
+          }}>{v === "insights" ? "INSIGHTS" : v === "progress" ? "AI ✦" : v === "heatmap" ? "MAP ◈" : v === "scorecard" ? "WEEK ⚡" : v === "prs" ? "PR 🏆" : "LOG"}</button>
         ))}
       </div>
+
+      {/* Quantitative insights grounded entirely in recorded sets. */}
+      {view === "insights" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <div style={{ ...g.card,padding:14 }}>
+            <div style={g.label}>Past 28 days · Recorded training</div>
+            <div style={{display:"flex",gap:24}}>
+              <div><b style={{fontSize:24,color:"#fff"}}>{recentTraining.sessions}</b><div style={{fontSize:9,color:"#888"}}>SESSIONS</div></div>
+              <div><b style={{fontSize:24,color:"#fff"}}>{recentTraining.recordedSets}</b><div style={{fontSize:9,color:"#888"}}>RECORDED SETS</div></div>
+            </div>
+            {Object.entries(recentTraining.setsByWorkoutType).sort((a,b)=>b[1]-a[1]).map(([kind,n])=>(
+              <div key={kind} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:"1px solid #262626",fontSize:11}}>
+                <span style={{textTransform:"uppercase",color:"#aaa"}}>{kind}</span><span style={{color:"#ff4d00"}}>{n} sets</span>
+              </div>
+            ))}
+            <div style={{fontSize:10,color:"#777",lineHeight:1.6,marginTop:10}}>Sets are grouped by workout category. They are not direct hard sets per anatomical muscle group.</div>
+          </div>
+          <div style={{ ...g.card,padding:14 }}>
+            <div style={g.label}>Exercise progression</div>
+            <select aria-label="Exercise to analyze" value={selectedInsight} onChange={e=>setInsightExercise(e.target.value)}
+              style={{width:"100%",background:"#111",border:"1px solid #333",padding:12,color:"#eee",borderRadius:6}}>
+              {insightNames.map(name=><option key={name} value={name}>{name}</option>)}
+            </select>
+            {exerciseTrend.length>0?(
+              <div style={{marginTop:12}}>
+                {exerciseTrend.map((point,i)=>(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 70px 90px",fontSize:11,padding:"9px 0",borderBottom:"1px solid #252525"}}>
+                    <span style={{color:"#aaa"}}>{point.date}</span>
+                    <span>{point.topWeight} lb</span>
+                    <span style={{color:"#ff4d00"}}>e1RM {point.estimated1RM}</span>
+                  </div>
+                ))}
+                <p style={{color:"#777",fontSize:10,lineHeight:1.6}}>Estimated 1RM is a mathematical trend proxy, not a tested maximum. Compare only consistent equipment and technique.</p>
+                {suggestedTarget&&<div style={{background:"#121d14",padding:12,borderRadius:6,color:"#85c792",fontSize:11,lineHeight:1.7}}>NEXT SESSION: {suggestedTarget.recommendation}</div>}
+              </div>
+            ):<p style={{color:"#888",fontSize:11}}>No weighted sets available for this exercise yet.</p>}
+          </div>
+        </div>
+      )}
 
       {/* PR VIEW */}
       {view === "prs" && (() => {
