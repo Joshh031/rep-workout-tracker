@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { normalizeName, findLastMatch, compareSets } from "./compare.js";
 import { parseWorkoutText } from "./parse.js";
+import { exerciseRecords } from "./pr-records.js";
 import { trainingSummary, strengthTrends, nextTarget } from "./analytics.js";
 import { buildExport } from "./export.js";
 
@@ -3145,24 +3146,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
         // Build all-time max for every exercise across all sessions.
         // Key by normalized name so casing/punctuation variants merge,
         // but keep the first-seen original spelling for display.
-        const prMap = {};
-        history.forEach(session => {
-          (session.exercises || []).forEach(ex => {
-            if (!ex.name) return;
-            const key = normalizeName(ex.name);
-            if (!key || ["back","chest","legs","shoulders","biceps","triceps","run"].includes(key)) return;
-            ex.sets.forEach(s => {
-              const w = parseFloat(s.weight) || 0;
-              const r = parseFloat(s.reps) || 0;
-              if (!(w > 0) || !(r > 0)) return;
-              if (!prMap[key]) prMap[key] = { displayName: key === "isolateralrow" ? "ISO-lateral Row" : key === "backextension" ? "Back Extension" : ex.name.trim(), maxWeight: 0, maxReps: 0, maxVol: 0, date: "", type: session.type };
-              const vol = w * r;
-              if (w > prMap[key].maxWeight) { prMap[key].maxWeight = w; prMap[key].date = session.date; }
-              if (r > prMap[key].maxReps) prMap[key].maxReps = r;
-              if (vol > prMap[key].maxVol) prMap[key].maxVol = vol;
-            });
-          });
-        });
+        const prMap = exerciseRecords(history);
 
         // Group by workout type
         const byType = {};
