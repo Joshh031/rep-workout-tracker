@@ -31,7 +31,7 @@ export function nextTarget(history,name){
  const series=strengthTrends(history,name,3);
  if(!series.length)return null;
  const last=series.at(-1);
- return {exercise:name,lastDate:last.date,previous:{weight:last.topWeight,reps:last.bestReps},
-   recommendation:'Match the previous quality set. If technique and recovery are good, attempt one additional rep before increasing load.',
+ return {exercise:name,lastDate:last.date,previous:{weight:last.topWeight,reps:last.bestReps}, suggested:{weight:last.topWeight,reps:last.bestReps+1},
+   recommendation:`Previous top load: ${last.topWeight} lb. If recovered, target ${last.topWeight} lb × ${last.bestReps+1} clean reps; otherwise repeat the last quality set.`,
    caveat:'Compare only equivalent exercise equipment and technique.'};
 }
