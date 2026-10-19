@@ -2967,6 +2967,10 @@ function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog,
   const [view, setView] = useState("insights"); // default to useful quantitative progress
   const [progressType, setProgressType] = useState(null);
   const [insightExercise,setInsightExercise] = useState("");
+  const [trendDays,setTrendDays] = useState(90);
+  const [aliases,setAliases] = useState(() => { try { return JSON.parse(localStorage.getItem("rep_exercise_aliases") || "{}"); } catch { return {}; } });
+  const [mergeFrom,setMergeFrom] = useState("");
+  const [mergeTo,setMergeTo] = useState("");
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [exportMsg, setExportMsg] = useState("");
@@ -3021,9 +3025,18 @@ function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog,
     return true;
   });
 
-  const recentTraining=trainingSummary(history,28);
+  // Apply user-confirmed aliases to ANALYTICS ONLY. Stored workouts remain original.
+  const aliasName = name => {
+    const k=normalizeName(name);
+    const canonical=aliases[k];
+    return canonical || name;
+  };
+  const analyticsHistory=history.map(h=>({...h,exercises:(h.exercises||[]).map(e=>({...e,name:aliasName(e.name)}))}));
+  const saveAliases = next => {setAliases(next);localStorage.setItem("rep_exercise_aliases",JSON.stringify(next));};
+  const rawNames=[...new Set(history.flatMap(h=>(h.exercises||[]).map(e=>e.name).filter(n=>n && normalizeName(n))))].sort((a,b)=>a.localeCompare(b));
+  const recentTraining=trainingSummary(analyticsHistory,28);
   const insightMap = new Map();
-  history.forEach(w => (w.exercises || []).forEach(e => {
+  analyticsHistory.forEach(w => (w.exercises || []).forEach(e => {
     const key = normalizeName(e.name);
     if (key && !["back","chest","legs","shoulders","biceps","triceps","run"].includes(key) && !insightMap.has(key)) insightMap.set(key, key === "isolateralrow" ? "ISO-lateral Row" : key === "backextension" ? "Back Extension" : e.name);
   }));
@@ -3031,8 +3044,8 @@ function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog,
   const selectedInsightKey = normalizeName(insightExercise);
   const selectedCanonicalName = insightNames.find(n => normalizeName(n)===selectedInsightKey);
   const selectedInsight=selectedCanonicalName||insightNames[0]||"";
-  const exerciseTrend=selectedInsight?strengthTrends(history,selectedInsight,12):[];
-  const suggestedTarget=selectedInsight?nextTarget(history,selectedInsight):null;
+  const exerciseTrend=selectedInsight?strengthTrends(analyticsHistory,selectedInsight,90).filter(x=>Date.parse(x.date)>=Date.now()-trendDays*86400000):[];
+  const suggestedTarget=selectedInsight?nextTarget(analyticsHistory,selectedInsight):null;
 
   // Workout types with enough data for analysis (5+ sessions)
   const workoutTypes = WORKOUT_TYPES.filter(t => history.filter(h => h.type === t).length >= 3);
@@ -3091,14 +3104,14 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
     <div style={g.page}>
       {/* View toggle */}
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-        {["insights", "log", "prs", "heatmap", "scorecard"].map(v => (
+        {["insights", "log", "prs", "names", "heatmap", "scorecard"].map(v => (
           <button key={v} onClick={() => setView(v)} style={{
             flex: 1, padding: "8px 0", borderRadius: 8, cursor: "pointer", minWidth: 48,
             fontFamily: "'DM Mono', monospace", fontSize: 7, letterSpacing: 1, textTransform: "uppercase",
             border: `1px solid ${view === v ? "#ff4d00" : "#2a2a2a"}`,
             background: view === v ? "#ff4d00" : "#1c1c1c",
             color: view === v ? "#fff" : "#777", fontWeight: view === v ? 700 : 400
-          }}>{v === "insights" ? "OVERVIEW" : v === "progress" ? "AI ✦" : v === "heatmap" ? "MAP ◈" : v === "scorecard" ? "WEEK ⚡" : v === "prs" ? "PR 🏆" : "LOG"}</button>
+          }}>{v === "names" ? "NAMES" : v === "insights" ? "OVERVIEW" : v === "progress" ? "AI ✦" : v === "heatmap" ? "MAP ◈" : v === "scorecard" ? "WEEK ⚡" : v === "prs" ? "PR 🏆" : "LOG"}</button>
         ))}
       </div>
 
@@ -3126,6 +3139,19 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
             </select>
             {exerciseTrend.length>0?(
               <div style={{marginTop:12}}>
+                <div style={{display:"flex",gap:8,marginBottom:12}}>
+                  {[30,90].map(days=><button key={days} style={{...g.ghost,flex:1,color:trendDays===days?"#ff4d00":"#aaa",borderColor:trendDays===days?"#ff4d00":"#333"}} onClick={()=>setTrendDays(days)}>{days} DAYS</button>)}
+                </div>
+                {exerciseTrend.length>1&&(()=>{
+                  const vals=exerciseTrend.map(e=>e.estimated1RM);
+                  const lo=Math.min(...vals)-2,hi=Math.max(...vals)+2;
+                  const points=vals.map((v,i)=>`${10+i*280/(vals.length-1)},${108-90*(v-lo)/(hi-lo||1)}`).join(" ");
+                  return <svg role="img" aria-label="Estimated strength trend" viewBox="0 0 300 120" style={{width:"100%",height:130,background:"#151515",borderRadius:6}}>
+                    <line x1="10" y1="108" x2="290" y2="108" stroke="#444"/>
+                    <polyline points={points} fill="none" stroke="#ff4d00" strokeWidth="2.5"/>
+                    {vals.map((v,i)=><circle key={i} cx={10+i*280/(vals.length-1)} cy={108-90*(v-lo)/(hi-lo||1)} r="3" fill="#ff4d00"/>)}
+                  </svg>;
+                })()}
                 {exerciseTrend.map((point,i)=>(
                   <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 70px 90px",fontSize:11,padding:"9px 0",borderBottom:"1px solid #252525"}}>
                     <span style={{color:"#aaa"}}>{point.date}</span>
@@ -3141,12 +3167,32 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
         </div>
       )}
 
+      {view === "names" && <div style={{...g.card,padding:14}}>
+        <div style={g.label}>Manage Exercise Names</div>
+        <div style={{fontSize:11,color:"#aaa",lineHeight:1.7,marginBottom:14}}>Confirm two labels represent exactly the same equipment and movement. This changes analytics only, never your original saved workout.</div>
+        <div style={{fontSize:10,color:"#999",marginBottom:5}}>NAME TO CONSOLIDATE</div>
+        <select aria-label="Name to consolidate" value={mergeFrom} onChange={e=>setMergeFrom(e.target.value)} style={{width:"100%",padding:10,marginBottom:12,background:"#111",color:"#eee"}}>
+          <option value="">Choose original name</option>{rawNames.map(n=><option key={n}>{n}</option>)}
+        </select>
+        <div style={{fontSize:10,color:"#999",marginBottom:5}}>CANONICAL NAME (SAME EXERCISE)</div>
+        <select aria-label="Canonical exercise" value={mergeTo} onChange={e=>setMergeTo(e.target.value)} style={{width:"100%",padding:10,marginBottom:12,background:"#111",color:"#eee"}}>
+          <option value="">Choose canonical name</option>{insightNames.map(n=><option key={n}>{n}</option>)}
+        </select>
+        <button style={g.primary} disabled={!mergeFrom||!mergeTo||normalizeName(mergeFrom)===normalizeName(mergeTo)}
+         onClick={()=>{saveAliases({...aliases,[normalizeName(mergeFrom)]:mergeTo});setMergeFrom("");setMergeTo("");}}>CONFIRM MATCH</button>
+        {Object.entries(aliases).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"8px 0",borderBottom:"1px solid #333",fontSize:10}}>
+          <span>{rawNames.find(n=>normalizeName(n)===k)||k} → {v}</span>
+          <button style={g.ghost} onClick={()=>{const next={...aliases};delete next[k];saveAliases(next);}}>UNDO</button>
+        </div>)}
+        <p style={{fontSize:10,color:"#777"}}>Mappings are stored on this device. They do not yet sync across devices.</p>
+      </div>}
+
       {/* PR VIEW */}
       {view === "prs" && (() => {
         // Build all-time max for every exercise across all sessions.
         // Key by normalized name so casing/punctuation variants merge,
         // but keep the first-seen original spelling for display.
-        const prMap = exerciseRecords(history);
+        const prMap = exerciseRecords(analyticsHistory);
 
         // Group by workout type
         const byType = {};
@@ -3186,7 +3232,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                   </div>
                   {byType[type].map((pr, i) => (
                     <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 60px 50px 50px", gap: 8, paddingBottom: 7, marginBottom: 7, borderBottom: i < byType[type].length - 1 ? "1px solid #181818" : "none", alignItems: "center" }}>
-                      <span style={{ fontSize: 10, color: "#ccc" }}>{pr.name}</span>
+                      <span style={{ fontSize: 10, color: "#ccc" }}>{pr.name}<span style={{display:"block",fontSize:8,color:"#888",marginTop:3}}>Best e1RM {pr.bestEstimated1RM || "—"} lb · {pr.bestEstimatedSet ? `${pr.bestEstimatedSet.weight} × ${pr.bestEstimatedSet.reps}` : "—"}</span></span>
                       <span style={{ fontSize: 11, color: "#ff4d00", fontWeight: 700, textAlign: "right", fontFamily: "'DM Mono', monospace" }}>{pr.maxWeight > 0 ? `${pr.maxWeight}` : "—"}</span>
                       <span style={{ fontSize: 10, color: "#888", textAlign: "right" }}>{pr.maxReps > 0 ? pr.maxReps : "—"}</span>
                       <span style={{ fontSize: 8, color: "#777", textAlign: "right" }}>{pr.date ? pr.date.replace(/\/\d{4}/, "") : "—"}</span>
