@@ -3232,7 +3232,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                   </div>
                   {byType[type].map((pr, i) => (
                     <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 60px 50px 50px", gap: 8, paddingBottom: 7, marginBottom: 7, borderBottom: i < byType[type].length - 1 ? "1px solid #181818" : "none", alignItems: "center" }}>
-                      <span style={{ fontSize: 10, color: "#ccc" }}>{pr.name}</span>
+                      <span style={{ fontSize: 10, color: "#ccc" }}>{pr.name}<span style={{display:"block",fontSize:8,color:"#888",marginTop:3}}>Best e1RM {pr.bestEstimated1RM || "—"} lb · {pr.bestEstimatedSet ? `${pr.bestEstimatedSet.weight} × ${pr.bestEstimatedSet.reps}` : "—"}</span></span>
                       <span style={{ fontSize: 11, color: "#ff4d00", fontWeight: 700, textAlign: "right", fontFamily: "'DM Mono', monospace" }}>{pr.maxWeight > 0 ? `${pr.maxWeight}` : "—"}</span>
                       <span style={{ fontSize: 10, color: "#888", textAlign: "right" }}>{pr.maxReps > 0 ? pr.maxReps : "—"}</span>
                       <span style={{ fontSize: 8, color: "#777", textAlign: "right" }}>{pr.date ? pr.date.replace(/\/\d{4}/, "") : "—"}</span>
