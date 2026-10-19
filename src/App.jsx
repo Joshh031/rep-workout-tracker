@@ -3040,7 +3040,7 @@ function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog,
   const insightMap = new Map();
   analyticsHistory.forEach(w => (w.exercises || []).forEach(e => {
     const key = normalizeName(e.name);
-    if (key && !["back","chest","legs","shoulders","biceps","triceps","run"].includes(key) && !insightMap.has(key)) insightMap.set(key, key === "isolateralrow" ? "ISO-lateral Row" : key === "backextension" ? "Back Extension" : e.name.replace(/^\s*\(\d{1,2}\)\s*/, "").trim());
+    if (key && !["back","chest","legs","shoulders","biceps","triceps","run"].includes(key) && !insightMap.has(key)) insightMap.set(key, key === "isolateralrow" ? "ISO-lateral Row" : key === "backextension" ? "Back Extension" : key === "tricepspushdown" ? "Triceps Pushdown" : e.name.replace(/^\s*\(\d{1,2}\)\s*/, "").trim());
   }));
   const insightNames = [...insightMap.values()].sort((a,b)=>a.localeCompare(b));
   const selectedInsightKey = normalizeName(insightExercise);
