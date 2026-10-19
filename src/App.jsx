@@ -3150,12 +3150,12 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
           (session.exercises || []).forEach(ex => {
             if (!ex.name) return;
             const key = normalizeName(ex.name);
-            if (!key) return;
+            if (!key || ["back","chest","legs","shoulders","biceps","triceps","run"].includes(key)) return;
             ex.sets.forEach(s => {
               const w = parseFloat(s.weight) || 0;
               const r = parseFloat(s.reps) || 0;
-              if (!w && !r) return;
-              if (!prMap[key]) prMap[key] = { displayName: ex.name.trim(), maxWeight: 0, maxReps: 0, maxVol: 0, date: "", type: session.type };
+              if (!(w > 0) || !(r > 0)) return;
+              if (!prMap[key]) prMap[key] = { displayName: key === "isolateralrow" ? "ISO-lateral Row" : key === "backextension" ? "Back Extension" : ex.name.trim(), maxWeight: 0, maxReps: 0, maxVol: 0, date: "", type: session.type };
               const vol = w * r;
               if (w > prMap[key].maxWeight) { prMap[key].maxWeight = w; prMap[key].date = session.date; }
               if (r > prMap[key].maxReps) prMap[key].maxReps = r;
