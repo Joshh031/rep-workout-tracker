@@ -743,30 +743,6 @@ Cover, in flowing prose: (1) overall verdict vs the last ${modal.readoutCtx.body
           </div>
         )}
 
-        {/* Post-workout crunches + stretches */}
-        <div style={{ background: "#181818", border: "1px solid #1a1a1a", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
-          <div style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 10 }}>Log Crunches & Stretches</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
-            {[["crunches","✦","Crunches"],["planks","◆","Planks"],["pushups","▲","Push-Ups"]].map(([f,icon,lbl]) => (
-              <div key={f} style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 12, marginBottom: 3 }}>{icon}</div>
-                <div style={{ fontSize: 7, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginBottom: 5 }}>{lbl}</div>
-                <input style={{ ...g.numInput, fontSize: 14 }} type="number" placeholder="0"
-                  value={postDaily[f]}
-                  onChange={e => setPostDaily(p => ({ ...p, [f]: e.target.value }))} />
-              </div>
-            ))}
-          </div>
-          <div style={{ fontSize: 8, color: "#888", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>Stretches</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-            {STRETCHES.map(s => (
-              <button key={s.key} onClick={() => setPostStretch(p => ({ ...p, [s.key]: !p[s.key] }))}
-                style={{ padding: "7px 8px", borderRadius: 6, border: `1px solid ${postStretch[s.key] ? "#1a4020" : "#1e1e1e"}`, background: postStretch[s.key] ? "#0b180b" : "#1c1c1c", color: postStretch[s.key] ? "#3a9e4f" : "#888", fontSize: 9, fontFamily: "'DM Mono', monospace", cursor: "pointer", letterSpacing: 1 }}>
-                {postStretch[s.key] ? "✓ " : ""}{s.label}
-              </button>
-            ))}
-          </div>
-        </div>
         <button onClick={onDone} style={{ ...g.primary, marginBottom: 0 }}>DONE</button>
       </div>
     </div>
@@ -1148,37 +1124,7 @@ function WorkoutTab({ history, setHistory, saveEntry, deleteEntry, dailyLog, set
         </div>
       )}
 
-      {!backlogDismissed && backlog.length > 0 && (
-        <div style={{ background: "#1a0d00", border: "1px solid #3a1a00", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
-          <div style={{ fontSize: 9, letterSpacing: 2, color: "#ff4d00", textTransform: "uppercase", marginBottom: 8 }}>◉ Backlog · {backlog.length} day{backlog.length === 1 ? "" : "s"} incomplete</div>
-          {backlog.slice(0, 5).map((item, i) => (
-            <div key={i} style={{ fontSize: 10, color: "#888", marginBottom: 4, lineHeight: 1.5 }}>
-              <span style={{ color: "#aaa" }}>{item.label}</span> — missing {item.missing.join(" · ")}
-            </div>
-          ))}
-          {backlog.length > 5 && (
-            <div style={{ fontSize: 10, color: "#888", marginBottom: 4 }}>+ {backlog.length - 5} more</div>
-          )}
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <button onClick={onGoToHistory} style={{ ...g.primary, flex: 1, padding: "9px 0", fontSize: 9 }}>REVIEW</button>
-            <button onClick={() => setBacklogDismissed(true)} style={{ ...g.ghost, flex: 1, padding: "9px 0", fontSize: 9, color: "#888" }}>DISMISS</button>
-          </div>
-        </div>
-      )}
-
       <WhatsNext history={history} onSelect={(type) => startWorkout(type)} />
-
-      {needsReminder && (
-        <div onClick={onGoToDaily} style={{ background: "#1a0d00", border: "1px solid #3a1a00", borderRadius: 8, padding: "10px 14px", marginBottom: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <div style={{ fontSize: 8, letterSpacing: 2, color: "#ff4d00", textTransform: "uppercase", marginBottom: 3 }}>● Today's Log Incomplete</div>
-            <div style={{ fontSize: 9, color: "#666" }}>
-              {[needsDailyLog && "crunches", needsStretches && "stretches", needsBreathing && "breathing"].filter(Boolean).join(" + ")} not logged yet
-            </div>
-          </div>
-          <span style={{ fontSize: 11, color: "#ff4d00" }}>→</span>
-        </div>
-      )}
 
       <span style={g.label}>Choose Workout</span>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 28 }}>
@@ -2099,7 +2045,7 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, saveEntries, updateEntry, 
         />
       </div>
 
-      <ReminderCard />
+      {/* Daily reminders removed; Oura steps and sleep sync retained. */}
 
       {/* Voice */}
       <VoiceFill tab="daily" onFill={(parsed) => {
@@ -2150,20 +2096,6 @@ function DailyTab({ dailyLog, setDailyLog, saveEntry, saveEntries, updateEntry, 
           {stepsBackfillMsg && (
             <div style={{ fontSize: 9, color: stepsBackfillMsg.startsWith("✓") ? "#3a9e4f" : "#c0392b", marginTop: 8, lineHeight: 1.5 }}>{stepsBackfillMsg}</div>
           )}
-        </div>
-      </div>
-
-      {/* Calisthenics */}
-      <span style={{ ...g.label, marginTop: 18 }}>Calisthenics</span>
-      <div style={{ ...g.card, padding: "16px 14px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-          {[["crunches", "✦", "Crunches"], ["planks", "◆", "Planks"], ["pushups", "▲", "Push-Ups"]].map(([f, icon, lbl]) => (
-            <div key={f} style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 16, marginBottom: 5 }}>{icon}</div>
-              <div style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 7 }}>{lbl}</div>
-              <input style={g.numInput} type="number" placeholder="0" value={daily[f]} onChange={e => setDaily({ ...daily, [f]: e.target.value })} />
-            </div>
-          ))}
         </div>
       </div>
 
@@ -3714,7 +3646,7 @@ export default function App() {
                 position: "relative",
               }}>
                 {t.label}
-                {t.key === "daily" && needsReminder && (
+                {false && t.key === "daily" && needsReminder && (
                   <span style={{ position: "absolute", top: 8, right: "calc(50% - 14px)", width: 5, height: 5, borderRadius: "50%", background: "#ff4d00", display: "inline-block" }} />
                 )}
               </button>
