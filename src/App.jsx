@@ -3736,6 +3736,12 @@ export default function App() {
         ) : (
           <>
             {tab === "workout" && <WorkoutTab history={history} setHistory={setHistory} saveEntry={saveWorkoutEntry} deleteEntry={deleteWorkoutEntry} dailyLog={dailyLog} setDailyLog={setDailyLog} saveDailyEntry={saveDailyEntry} updateDailyEntry={updateDailyEntry} sleepLog={sleepLog} needsReminder={needsReminder} needsDailyLog={needsDailyLog} needsStretches={needsStretches} needsBreathing={needsBreathing} onGoToDaily={() => {setTab("recovery");setRecoveryView("daily");}} onGoToHistory={() => setTab("progress")} />}
+            {tab === "recovery" && <div style={{margin:"12px 16px",padding:"12px 14px",background:"#1b1b1b",border:"1px solid #303030",borderRadius:8}}>
+              <div style={{fontSize:10,color:"#ff4d00",letterSpacing:2,marginBottom:8}}>CHATGPT CONNECTION SETUP</div>
+              <div style={{fontSize:11,color:"#aaa",marginBottom:10,lineHeight:1.6}}>Copy your REP account ID so Workout Goals can connect to your existing records. This is not your passphrase.</div>
+              <div style={{fontSize:12,color:"#ddd",marginBottom:10,userSelect:"text"}}>{userId}</div>
+              <button style={{...g.ghost,color:"#ff4d00",borderColor:"#ff4d00"}} onClick={async()=>{try{await navigator.clipboard.writeText(userId)}catch(e){window.prompt("Copy your REP account ID:",userId)}}}>COPY REP ACCOUNT ID</button>
+            </div>}
             {tab === "recovery" && <div style={{display:"flex",gap:8,padding:"8px 16px"}}>
               {[["oura","Oura · Sleep"],["daily","Steps & Routine"]].map(([key,label])=>(
                 <button key={key} onClick={()=>setRecoveryView(key)}
