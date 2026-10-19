@@ -1,0 +1,41 @@
+openapi: 3.1.0
+info:
+  title: REP Workout Logger
+  version: 0.1.0
+  description: Private workout records for the user's Workout Goals coaching workflow.
+servers:
+  - url: https://rep-workout-tracker.vercel.app
+paths:
+  /api/chatgpt-workouts:
+    get:
+      operationId: readWorkoutHistory
+      summary: Read recent workout sessions and exercises for progress coaching
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '200': { description: Historical workout entries }
+        '401': { description: Unauthorized }
+    post:
+      operationId: saveConfirmedWorkout
+      summary: Save a completed workout only after the user confirms its exercises and sets
+      description: Pass the exact original workout text; do not infer missing weights or reps. Reuse the same idempotency key on retries.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [date, type, text, idempotencyKey]
+              properties:
+                date: { type: string, format: date }
+                type: { type: string, enum: [chest, back, legs, shoulders, biceps, triceps] }
+                text: { type: string, maxLength: 8000 }
+                idempotencyKey: { type: string, minLength: 16, maxLength: 128 }
+      responses:
+        '201': { description: Saved }
+        '200': { description: Already saved; no duplicate created }
+        '422': { description: Workout text cannot be reliably parsed; clarify first }
+        '401': { description: Unauthorized }
