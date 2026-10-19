@@ -28,7 +28,7 @@ const words = (name) => !name ? [] : name.toLowerCase()
 // folded, so "Push-Up"/"push ups" and "Shrug"/"Shrugs" collapse together.
 // Display data keeps the original spelling.
 export function normalizeName(name) {
-  const raw = String(name || "").toLowerCase().trim().replace(/[–—_]/g, " ").replace(/-/g, " ").replace(/\s+/g, " ");
+  const raw = String(name || "").replace(/^\s*\(\d{1,2}\)\s*/, "").toLowerCase().trim().replace(/[–—_]/g, " ").replace(/-/g, " ").replace(/\s+/g, " ");
   // Explicit, conservative aliases for names verified by the owner. The
   // original data remains intact. Machine/equipment variants are not assumed
   // equivalent unless deliberately listed here.
@@ -37,7 +37,7 @@ export function normalizeName(name) {
   if (/^(?:lower back extension(?: machine)?|lower back extensions?|back extension(?: machine)?|back extensions?)$/.test(alias)) return "backextension";
   // A parser artifact like "x245;" is not an exercise name.
   if (/^[x×]?\d+(?:\.\d+)?[;,.]?$/.test(raw) || /^x\s*\d+(?:\.\d+)?/.test(raw)) return "";
-  return words(name).join("");
+  return words(raw).join("");
 }
 
 export function nameTokens(name) {

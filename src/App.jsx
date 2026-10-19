@@ -2969,6 +2969,7 @@ function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog,
   const [progressType, setProgressType] = useState(null);
   const [insightExercise,setInsightExercise] = useState("");
   const [trendDays,setTrendDays] = useState(90);
+  const [trendMetric,setTrendMetric] = useState("estimated1RM");
   const [aliases,setAliases] = useState(() => { try { return JSON.parse(localStorage.getItem("rep_exercise_aliases") || "{}"); } catch { return {}; } });
   const [mergeFrom,setMergeFrom] = useState("");
   const [mergeTo,setMergeTo] = useState("");
@@ -3034,12 +3035,12 @@ function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog,
   };
   const analyticsHistory=history.map(h=>({...h,exercises:(h.exercises||[]).map(e=>({...e,name:aliasName(e.name)}))}));
   const saveAliases = next => {setAliases(next);localStorage.setItem("rep_exercise_aliases",JSON.stringify(next));};
-  const rawNames=[...new Set(history.flatMap(h=>(h.exercises||[]).map(e=>e.name).filter(n=>n && normalizeName(n))))].sort((a,b)=>a.localeCompare(b));
+  const rawNames=[...new Set(history.flatMap(h=>(h.exercises||[]).map(e=>e.name?.replace(/^\s*\(\d{1,2}\)\s*/, "").trim()).filter(n=>n && normalizeName(n))))].sort((a,b)=>a.localeCompare(b));
   const recentTraining=trainingSummary(analyticsHistory,28);
   const insightMap = new Map();
   analyticsHistory.forEach(w => (w.exercises || []).forEach(e => {
     const key = normalizeName(e.name);
-    if (key && !["back","chest","legs","shoulders","biceps","triceps","run"].includes(key) && !insightMap.has(key)) insightMap.set(key, key === "isolateralrow" ? "ISO-lateral Row" : key === "backextension" ? "Back Extension" : e.name);
+    if (key && !["back","chest","legs","shoulders","biceps","triceps","run"].includes(key) && !insightMap.has(key)) insightMap.set(key, key === "isolateralrow" ? "ISO-lateral Row" : key === "backextension" ? "Back Extension" : e.name.replace(/^\s*\(\d{1,2}\)\s*/, "").trim());
   }));
   const insightNames = [...insightMap.values()].sort((a,b)=>a.localeCompare(b));
   const selectedInsightKey = normalizeName(insightExercise);
@@ -3143,9 +3144,14 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                 <div style={{display:"flex",gap:8,marginBottom:12}}>
                   {[30,90].map(days=><button key={days} style={{...g.ghost,flex:1,color:trendDays===days?"#ff4d00":"#aaa",borderColor:trendDays===days?"#ff4d00":"#333"}} onClick={()=>setTrendDays(days)}>{days} DAYS</button>)}
                 </div>
-                <div style={{fontSize:10,color:"#bbb",marginBottom:8}}>Estimated 1-rep max (e1RM) · lb</div>
+                <div style={{display:"flex",gap:8,marginBottom:10}}>
+                  {[["estimated1RM","Estimated 1RM"],["topWeight","Working Weight"]].map(([metric,label])=>
+                    <button key={metric} onClick={()=>setTrendMetric(metric)} style={{...g.ghost,flex:1,
+                      color:trendMetric===metric?"#ff4d00":"#aaa",borderColor:trendMetric===metric?"#ff4d00":"#333"}}>{label}</button>)}
+                </div>
+                <div style={{fontSize:10,color:"#bbb",marginBottom:8}}>{trendMetric==="topWeight" ? "Heaviest recorded working set · lb" : "Estimated 1-rep max (e1RM) · lb"}</div>
                 {exerciseTrend.length>1&&(()=>{
-                  const vals=exerciseTrend.map(e=>e.estimated1RM);
+                  const vals=exerciseTrend.map(e=>e[trendMetric]);
                   const rawMin=Math.min(...vals),rawMax=Math.max(...vals);
                   const span=Math.max(10,rawMax-rawMin);
                   const step=Math.max(5,Math.ceil((span*1.3/4)/5)*5);
@@ -3157,7 +3163,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                   const points=vals.map((v,i)=>`${x(i)},${y(v)}`).join(" ");
                   const tickCount=4;
                   const xDate=i=>{const d=new Date(exerciseTrend[i].date);return Number.isFinite(d.getTime())?`${d.getMonth()+1}/${d.getDate()}`:exerciseTrend[i].date;};
-                  return <svg role="img" aria-label={`Estimated one-rep maximum in pounds from ${xDate(0)} to ${xDate(vals.length-1)}, range ${rawMin.toFixed(1)} to ${rawMax.toFixed(1)} pounds`}
+                  return <svg role="img" aria-label={`${trendMetric==="topWeight"?"Heaviest recorded working weight":"Estimated one-rep maximum"} in pounds from ${xDate(0)} to ${xDate(vals.length-1)}, range ${rawMin.toFixed(1)} to ${rawMax.toFixed(1)} pounds`}
                     viewBox="0 0 320 165" style={{width:"100%",height:"auto",background:"#151515",borderRadius:6}}>
                     {Array.from({length:tickCount+1},(_,i)=>{
                       const v=lo+(hi-lo)*i/tickCount, yy=y(v);
@@ -3173,6 +3179,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                     <text x={right} y="150" fill="#aaa" fontSize="10" textAnchor="end">{xDate(vals.length-1)}</text>
                   </svg>;
                 })()}
+                {trendMetric==="topWeight" && <p style={{fontSize:10,color:"#888",lineHeight:1.6}}>Working weight is the heaviest load recorded in that workout, regardless of reps. Compare the repetitions below before interpreting changes as strength gains.</p>}
                 {exerciseTrend.map((point,i)=>(
                   <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 70px 90px",fontSize:11,padding:"9px 0",borderBottom:"1px solid #252525"}}>
                     <span style={{color:"#aaa"}}>{point.date}</span>
