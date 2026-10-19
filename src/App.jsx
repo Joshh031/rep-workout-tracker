@@ -2964,7 +2964,8 @@ Keep it under 200 words. Be a tough but fair coach.`;
 // ── HISTORY TAB ───────────────────────────────────────────────────────────
 function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog, deleteDaily, sleepLog, setSleepLog, deleteSleep }) {
   const [search, setSearch] = useState("");
-  const [view, setView] = useState("insights"); // default to useful quantitative progress
+  const [view, setView] = useState("insights");
+  const [expandedPrGroups,setExpandedPrGroups] = useState({}); // default to useful quantitative progress
   const [progressType, setProgressType] = useState(null);
   const [insightExercise,setInsightExercise] = useState("");
   const [trendDays,setTrendDays] = useState(90);
@@ -3218,11 +3219,15 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
             <div style={{ fontSize: 8, letterSpacing: 2, color: "#888", textTransform: "uppercase", marginBottom: 12 }}>All-Time Personal Records</div>
             {types.map(type => (
               <div key={type} style={{ ...g.card, overflow: "hidden", marginBottom: 12 }}>
-                <div style={{ background: "#181818", padding: "10px 14px", borderBottom: "1px solid #1a1a1a", display: "flex", alignItems: "center", gap: 8 }}>
+                <button type="button" aria-expanded={!!expandedPrGroups[type]}
+                  onClick={() => setExpandedPrGroups(prev => ({...prev,[type]:!prev[type]}))}
+                  style={{ width:"100%", background:"#181818", padding:"13px 14px", display:"flex", alignItems:"center", gap:8, border:0, cursor:"pointer", color:"#ddd", fontFamily:"inherit", textAlign:"left" }}>
                   <span style={{ fontSize: 14 }}>{ICON[type] || "💪"}</span>
-                  <span style={{ fontSize: 9, letterSpacing: 3, color: "#888", textTransform: "uppercase" }}>{type}</span>
-                </div>
-                <div style={{ padding: "8px 14px" }}>
+                  <span style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", flex:1 }}>{type}</span>
+                  <span style={{fontSize:9,color:"#888"}}>{byType[type].length} exercises</span>
+                  <span aria-hidden="true" style={{fontSize:16,color:"#ff4d00"}}>{expandedPrGroups[type] ? "▴" : "▾"}</span>
+                </button>
+                {expandedPrGroups[type] && <div style={{ padding: "8px 14px" }}>
                   {/* Header */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 50px 50px", gap: 8, marginBottom: 6, paddingBottom: 6, borderBottom: "1px solid #1c1c1c" }}>
                     <span style={{ fontSize: 7, color: "#777", letterSpacing: 1, textTransform: "uppercase" }}>Exercise</span>
@@ -3238,7 +3243,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                       <span style={{ fontSize: 8, color: "#777", textAlign: "right" }}>{pr.date ? pr.date.replace(/\/\d{4}/, "") : "—"}</span>
                     </div>
                   ))}
-                </div>
+                </div>}
               </div>
             ))}
           </div>
