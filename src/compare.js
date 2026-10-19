@@ -34,7 +34,7 @@ export function normalizeName(name) {
   // equivalent unless deliberately listed here.
   const alias = raw.replace(/\biso[ -]?lateral\b/g, "isolateral").replace(/[.,:;]+$/g, "").trim();
   if (/^isolateral (?:back )?row$/.test(alias)) return "isolateralrow";
-  if (/^(?:lower back extension(?: machine)?|lower back extensions?|back extension(?: machine)?|back extensions?|seated back extension)$/.test(alias)) return "backextension";
+  if (/^(?:lower back extension(?: machine)?|lower back extensions?|back extension(?: machine)?|back extensions?)$/.test(alias)) return "backextension";
   // A parser artifact like "x245;" is not an exercise name.
   if (/^[x×]?\d+(?:\.\d+)?[;,.]?$/.test(raw) || /^x\s*\d+(?:\.\d+)?/.test(raw)) return "";
   return words(name).join("");
