@@ -3143,14 +3143,34 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                 <div style={{display:"flex",gap:8,marginBottom:12}}>
                   {[30,90].map(days=><button key={days} style={{...g.ghost,flex:1,color:trendDays===days?"#ff4d00":"#aaa",borderColor:trendDays===days?"#ff4d00":"#333"}} onClick={()=>setTrendDays(days)}>{days} DAYS</button>)}
                 </div>
+                <div style={{fontSize:10,color:"#bbb",marginBottom:8}}>Estimated 1-rep max (e1RM) · lb</div>
                 {exerciseTrend.length>1&&(()=>{
                   const vals=exerciseTrend.map(e=>e.estimated1RM);
-                  const lo=Math.min(...vals)-2,hi=Math.max(...vals)+2;
-                  const points=vals.map((v,i)=>`${10+i*280/(vals.length-1)},${108-90*(v-lo)/(hi-lo||1)}`).join(" ");
-                  return <svg role="img" aria-label="Estimated strength trend" viewBox="0 0 300 120" style={{width:"100%",height:130,background:"#151515",borderRadius:6}}>
-                    <line x1="10" y1="108" x2="290" y2="108" stroke="#444"/>
+                  const rawMin=Math.min(...vals),rawMax=Math.max(...vals);
+                  const span=Math.max(10,rawMax-rawMin);
+                  const step=Math.max(5,Math.ceil((span*1.3/4)/5)*5);
+                  const lo=Math.max(0,Math.floor((rawMin-step*0.4)/step)*step);
+                  const hi=Math.max(lo+step*4,Math.ceil((rawMax+step*0.4)/step)*step);
+                  const left=48,right=294,top=18,bottom=130;
+                  const y=v=>bottom-(v-lo)/(hi-lo)*(bottom-top);
+                  const x=i=>left+i*(right-left)/(vals.length-1);
+                  const points=vals.map((v,i)=>`${x(i)},${y(v)}`).join(" ");
+                  const tickCount=4;
+                  const xDate=i=>{const d=new Date(exerciseTrend[i].date);return Number.isFinite(d.getTime())?`${d.getMonth()+1}/${d.getDate()}`:exerciseTrend[i].date;};
+                  return <svg role="img" aria-label={`Estimated one-rep maximum in pounds from ${xDate(0)} to ${xDate(vals.length-1)}, range ${rawMin.toFixed(1)} to ${rawMax.toFixed(1)} pounds`}
+                    viewBox="0 0 320 165" style={{width:"100%",height:"auto",background:"#151515",borderRadius:6}}>
+                    {Array.from({length:tickCount+1},(_,i)=>{
+                      const v=lo+(hi-lo)*i/tickCount, yy=y(v);
+                      return <g key={i}>
+                        <line x1={left} y1={yy} x2={right} y2={yy} stroke="#303030" strokeWidth="1"/>
+                        <text x={left-7} y={yy+4} fill="#aaa" fontSize="10" textAnchor="end">{Math.round(v)}</text>
+                      </g>;
+                    })}
                     <polyline points={points} fill="none" stroke="#ff4d00" strokeWidth="2.5"/>
-                    {vals.map((v,i)=><circle key={i} cx={10+i*280/(vals.length-1)} cy={108-90*(v-lo)/(hi-lo||1)} r="3" fill="#ff4d00"/>)}
+                    {vals.map((v,i)=><circle key={i} cx={x(i)} cy={y(v)} r="3.5" fill="#ff4d00"/>)}
+                    <text x={left} y="150" fill="#aaa" fontSize="10" textAnchor="start">{xDate(0)}</text>
+                    {vals.length>2&&<text x={(left+right)/2} y="150" fill="#888" fontSize="10" textAnchor="middle">{xDate(Math.floor((vals.length-1)/2))}</text>}
+                    <text x={right} y="150" fill="#aaa" fontSize="10" textAnchor="end">{xDate(vals.length-1)}</text>
                   </svg>;
                 })()}
                 {exerciseTrend.map((point,i)=>(
@@ -3160,7 +3180,11 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                     <span style={{color:"#ff4d00"}}>e1RM {point.estimated1RM}</span>
                   </div>
                 ))}
-                <p style={{color:"#777",fontSize:10,lineHeight:1.6}}>Estimated 1RM is a mathematical trend proxy, not a tested maximum. Compare only consistent equipment and technique.</p>
+                <div style={{padding:"12px 0",fontSize:11,lineHeight:1.7,color:"#aaa"}}>
+                  <strong style={{color:"#eee"}}>What is e1RM?</strong> Estimated one-repetition maximum: the weight you might lift for one rep, calculated from an actual set using the Epley formula:
+                  <div style={{color:"#ff8a55",marginTop:5}}>e1RM = weight × (1 + reps ÷ 30)</div>
+                  Example: 265 lb × 12 reps = 371 lb estimated 1RM. This is <strong>not</strong> a tested max; estimates become less reliable at high reps or on assisted/plate-loaded machines. Compare trends on the same equipment and with consistent technique.
+                </div>
                 {suggestedTarget&&<div style={{background:"#121d14",padding:12,borderRadius:6,color:"#85c792",fontSize:11,lineHeight:1.7}}>NEXT SESSION: {suggestedTarget.recommendation}</div>}
               </div>
             ):<p style={{color:"#888",fontSize:11}}>No weighted sets available for this exercise yet.</p>}
