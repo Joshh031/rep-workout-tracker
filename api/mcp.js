@@ -1,4 +1,4 @@
-// Private, stateless MCP Streamable HTTP adapter. No workout data is public.
+// Stateless MCP adapter: public protocol/tool descriptions, private workout tools.
 import {authorizeMcp} from './_oauth.js';
 import workoutApi from './chatgpt-workouts.js';
 
@@ -32,6 +32,14 @@ const TOOL_LIST=[
 ];
 const reply=(res,id,result)=>res.status(200).json({jsonrpc:'2.0',id,result});
 const fail=(res,id,code,message,status=200)=>res.status(status).json({jsonrpc:'2.0',id,error:{code,message}});
+function authenticationRequired(res,id,tool,error='invalid_token'){
+ const description=error==='insufficient_scope'?'Grant rep:read and rep:write to save confirmed workouts':'Connect REP with a valid access token before reading or saving workouts';
+ const challenge=`Bearer error="${error}", error_description="${description}", scope="rep:read rep:write", resource_metadata="${METADATA}"`;
+ // Only fixed tool names and outcomes are logged; never credentials or arguments.
+ console.info(JSON.stringify({event:'rep_mcp_auth_required',tool:tool.name,error}));
+ res.setHeader('WWW-Authenticate',challenge);
+ return reply(res,id,{isError:true,content:[{type:'text',text:description+'. No workout data was read or changed.'}],_meta:{'mcp/www_authenticate':[challenge]}});
+}
 function invokeWorkoutApi(method,args={}){
  return new Promise(resolve=>{
   const req={method,headers:{authorization:'Bearer '+(process.env.REP_CHATGPT_TOKEN||'')},query:args,body:args};
@@ -57,11 +65,11 @@ export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
  const origin=req.headers?.origin;
  if(origin&&!ORIGINS.has(origin))return res.status(403).json({error:'Origin not allowed'});
- if(!(await authorizeMcp(req))){
-  res.setHeader('WWW-Authenticate',`Bearer resource_metadata="${METADATA}", scope="rep:read rep:write"`);
-  return res.status(401).json({error:'Unauthorized'});
- }
  if(req.method!=='POST'){
+  if(!(await authorizeMcp(req))){
+   res.setHeader('WWW-Authenticate',`Bearer resource_metadata="${METADATA}", scope="rep:read rep:write"`);
+   return res.status(401).json({error:'Unauthorized'});
+  }
   res.setHeader('Allow','POST');
   return res.status(405).json({error:'This stateless MCP endpoint uses POST'});
  }
@@ -73,23 +81,30 @@ export default async function handler(req,res){
  if(!Object.hasOwn(msg,'id'))return res.status(202).end();
  if(typeof msg.id!=='string'&&!(typeof msg.id==='number'&&Number.isFinite(msg.id)))return fail(res,null,-32600,'Invalid request ID',400);
  if(msg.method==='initialize'){
+  console.info(JSON.stringify({event:'rep_mcp_discovery',operation:'initialize'}));
   const negotiated=VERSIONS.includes(msg.params?.protocolVersion)?msg.params.protocolVersion:VERSION;
   res.setHeader('MCP-Protocol-Version',negotiated);
-  return reply(res,msg.id,{protocolVersion:negotiated,capabilities:{tools:{listChanged:false}},serverInfo:{name:'rep-workout-tracker',version:'1.1.0'},instructions});
+  return reply(res,msg.id,{protocolVersion:negotiated,capabilities:{tools:{listChanged:false}},serverInfo:{name:'rep-workout-tracker',version:'1.1.1'},instructions});
  }
  res.setHeader('MCP-Protocol-Version',version||'2025-03-26');
  if(msg.method==='ping')return reply(res,msg.id,{});
- if(msg.method==='tools/list')return reply(res,msg.id,{tools:TOOL_LIST});
+ if(msg.method==='tools/list'){
+  console.info(JSON.stringify({event:'rep_mcp_discovery',operation:'tools/list'}));
+  return reply(res,msg.id,{tools:TOOL_LIST});
+ }
  if(msg.method==='tools/call'){
   const tool=TOOL_LIST.find(t=>t.name===msg.params?.name);
   if(!tool)return fail(res,msg.id,-32602,'Unknown tool');
+  // Discovery never opens the database. Every data operation must pass OAuth
+  // before argument handling or the private REST adapter can execute.
+  if(!(await authorizeMcp(req)))return authenticationRequired(res,msg.id,tool);
   const args=msg.params?.arguments??{};
   if(tool.name==='rep_save_workout'&&!(await authorizeMcp(req,'rep:write'))){
-   const challenge=`Bearer error="insufficient_scope", error_description="Grant rep:write to save confirmed workouts", scope="rep:read rep:write", resource_metadata="${METADATA}"`;
-   return reply(res,msg.id,{isError:true,content:[{type:'text',text:'Not saved: reconnect REP and grant rep:write permission.'}],_meta:{'mcp/www_authenticate':[challenge]}});
+   return authenticationRequired(res,msg.id,tool,'insufficient_scope');
   }
   if(!validateArgs(tool,args))return fail(res,msg.id,-32602,'Invalid tool arguments; saving requires confirmed: true and complete workout details');
   const {status,payload}=await invokeWorkoutApi(tool.name==='rep_get_workouts'?'GET':'POST',args);
+  console.info(JSON.stringify({event:'rep_mcp_tool_result',tool:tool.name,status}));
   const result={isError:status>=400,content:[{type:'text',text:JSON.stringify(payload)}]};
   if((version||'2025-03-26')!=='2025-03-26')result.structuredContent=Array.isArray(payload)?{workouts:payload}:payload;
   return reply(res,msg.id,result);
