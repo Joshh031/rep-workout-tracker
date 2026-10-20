@@ -12,7 +12,7 @@ async function trustedKeys(url){
  cache={url,until:Date.now()+300000,keys:body.keys};
  return cache.keys;
 }
-export async function authorizeMcp(req){
+export async function authorizeMcp(req,requiredScope='rep:read'){
  const token=String(req.headers?.authorization||'').replace(/^Bearer\s+/i,'');
  if(!token||token.length>8192)return false;
  const legacy=process.env.REP_CHATGPT_TOKEN||'';
@@ -25,6 +25,7 @@ export async function authorizeMcp(req){
   const [h,p,s]=segments,{alg,kid}=decode(h),claims=decode(p);
   if(!['RS256','ES256'].includes(alg)||!kid||!s)return false;
   const now=Math.floor(Date.now()/1000);
+  if(!String(claims.scope||'').split(' ').includes(requiredScope))return false;
   if(claims.iss!==issuer||claims.sub!==subject||!(Array.isArray(claims.aud)?claims.aud.includes(audience):claims.aud===audience)||!Number.isFinite(claims.exp)||claims.exp<=now||claims.nbf>now||claims.iat>now+60)return false;
   const jwk=(await trustedKeys(url.href)).find(k=>k.kid===kid&&k.use!=='enc'&&(!k.alg||k.alg===alg));
   if(!jwk)return false;
