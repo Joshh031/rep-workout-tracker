@@ -25,16 +25,17 @@ database, Auth0 tenant/API/client, or an existing ChatGPT connection.
 
 ## Database prerequisite for concurrent duplicate protection
 
-Apply `migrations/20261020_chatgpt_workout_uniqueness.sql` to the **existing REP
-project**, after inspecting its table definition and checking for duplicate
-ChatGPT IDs. It only adds two partial unique indexes; it does not change any
-workout record or grant any access. Existing non-ChatGPT records are unaffected.
+Applied and verified `supabase/migrations/20261020172324_rep_chatgpt_workout_uniqueness_and_private_access.sql`
+on the existing REP project on 2026-10-20. Both partial unique indexes are
+valid. The pre-existing public workout policy is restricted to the backend
+service role; RLS remains enabled. Record count and full-record checksum were
+unchanged, and the production backend database health check still succeeds.
 The transaction fails if existing ChatGPT records violate the ID constraint;
 do not delete history to force it through.
 
-Until both indexes are verified in the actual database, simultaneous saves
-can still race. Unit tests model the unique constraints; they are not evidence
-that the migration has run. Serial duplicate checks alone are insufficient.
+The database now arbitrates simultaneous ChatGPT inserts by workout ID and
+canonical content hash. A real, user-approved save/retry/read-back test through
+ChatGPT remains pending; unit tests are not a substitute for that test.
 
 ## OAuth client connection
 
@@ -101,3 +102,17 @@ Official references:
 - https://developers.openai.com/plugins/deploy/connect-chatgpt
 - https://auth0.com/docs/get-started/auth0-overview/create-applications/register-applications-with-cimd
 - https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
+
+## Verified status, 2026-10-20
+
+PR #48 is deployed to production. All 100 automated tests and the build pass.
+Live checks confirm both metadata routes return 200, missing/invalid credentials
+return 401 with scopes, and an untrusted Origin returns 403. Direct authenticated
+database reads work, but these are not an OAuth MCP tool call.
+
+Remaining: inspect the existing Auth0 application/client settings and complete
+ChatGPT OAuth, then perform an approved save/read-back/retry test in the existing
+Workout Goals conversation. In this run the Auth0 dashboard blocked the cloud
+browser with security verification; ChatGPT Google sign-in returned HTTP 520.
+The precise client-side OAuth failure cannot be established from public
+discovery alone. No new plugin, Auth0 application or database was created.
