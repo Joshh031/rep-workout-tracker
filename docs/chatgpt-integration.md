@@ -6,8 +6,11 @@ database, Auth0 tenant/API/client, or an existing ChatGPT connection.
 
 ## Implemented server behavior
 
-- `POST /api/mcp`: authenticated, stateless Streamable HTTP; negotiates
-  2025-03-26, 2025-06-18 and 2025-11-25. GET/DELETE return 405.
+- `POST /api/mcp`: stateless Streamable HTTP; negotiates 2025-03-26,
+  2025-06-18 and 2025-11-25. Protocol initialization and tool descriptions are
+  discoverable without a token. Every workout tool invocation requires the
+  existing authentication checks. Authenticated GET/DELETE return 405;
+  unauthenticated GET/DELETE return the HTTP 401 discovery challenge.
 - `rep_get_workouts`: actual records, server-bound to `REP_USER_ID`, with date,
   type, exact ID and limit/offset filters. Use paging for older progression data.
 - `rep_save_workout`: requires both read/write scopes and explicit
@@ -17,8 +20,12 @@ database, Auth0 tenant/API/client, or an existing ChatGPT connection.
 - JWT verification checks signature, issuer, audience, expiry, subject and
   scopes; unknown signing-key IDs trigger a JWKS refresh. Existing private
   REST bearer access is retained. Never send that bearer token to the model.
-- OAuth scopes are declared on tools. Permission failures include an MCP
-  authentication challenge so ChatGPT can request the missing permission.
+- OAuth scopes are declared on tools. Missing/invalid credentials and missing
+  write permission return `isError: true` and `_meta["mcp/www_authenticate"]`
+  with `error` and `error_description`, so ChatGPT can launch tool-level OAuth.
+  Auth failures return no records and never reach the database adapter.
+- Diagnostic logs contain fixed discovery operations, tool names and outcomes
+  only; no tokens, request arguments, user identity or workout data.
 - Server instructions require confirmation, retry-safe IDs and read-back.
 - Retry handling recognizes the same key and equivalent workout content,
   preserves existing records, and never overwrites on conflict.
@@ -53,10 +60,13 @@ form only, never in source code, URLs, chat or logs.
 - Copy the **exact callback shown by this existing ChatGPT connection** into
   the existing Auth0 application's Allowed Callback URLs. Do not guess it or
   recreate a connection to obtain a different callback.
+  The current connection's Auth0 error confirmed the requested callback is
+  `https://chatgpt.com/connector_platform_oauth_redirect`. Preserve other valid
+  callback entries when adding this exact address.
 - Match the client authentication method in ChatGPT and Auth0, normally
   `client_secret_post` or `client_secret_basic` for a confidential web client.
 - Authorization Code with S256 PKCE must be enabled. Do not switch to password
-  grants, disable JWT checks, or make the MCP endpoint anonymous.
+  grants, disable JWT checks, or allow anonymous workout tool execution.
 - ChatGPT sends `resource`, while Auth0 traditionally uses `audience`. Inspect
   Auth0's **Resource Parameter Compatibility Profile** and set it to
   `compatibility` if required so the REP resource selects the existing REP API.
@@ -105,14 +115,21 @@ Official references:
 
 ## Verified status, 2026-10-20
 
-PR #48 is deployed to production. All 100 automated tests and the build pass.
-Live checks confirm both metadata routes return 200, missing/invalid credentials
-return 401 with scopes, and an untrusted Origin returns 403. Direct authenticated
-database reads work, but these are not an OAuth MCP tool call.
+PRs #48 and #49 are deployed to production. Direct authenticated database reads
+work, but these are not an OAuth MCP tool call. One existing private ChatGPT
+plugin now points to REP and can be selected in the original Workout Goals
+conversation. OAuth first failed with the exact callback mismatch documented
+above. Later Connect attempts remained on a spinner, and the conversation
+reported no available REP tools. The available Vercel logs contain no runtime
+error explaining the spinner; its cause is not yet verified.
 
-Remaining: inspect the existing Auth0 application/client settings and complete
-ChatGPT OAuth, then perform an approved save/read-back/retry test in the existing
-Workout Goals conversation. In this run the Auth0 dashboard blocked the cloud
-browser with security verification; ChatGPT Google sign-in returned HTTP 520.
-The precise client-side OAuth failure cannot be established from public
-discovery alone. No new plugin, Auth0 application or database was created.
+The next compatibility change exposes only tool descriptions before sign-in and
+adds structured OAuth challenges for both read and write calls. This enables
+the documented in-chat authorization path without removing any data-access
+checks. It is not proof that the connection works.
+
+Remaining: verify the Auth0 client settings, complete ChatGPT OAuth, retrieve an
+existing workout through the connected MCP tool, then perform an approved
+save/read-back/retry test. Do not recreate the existing plugin, Auth0 resources
+or database. The user's signed-in browser must perform any required consent;
+the cloud browser cannot reuse that browser session.
