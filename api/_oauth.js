@@ -13,7 +13,7 @@ async function trustedKeys(url){
  return cache.keys;
 }
 export async function authorizeMcp(req){
- const token=String(req.headers?.authorization||'').replace(/^Bearer\\s+/i,'');
+ const token=String(req.headers?.authorization||'').replace(/^Bearer\s+/i,'');
  if(!token||token.length>8192)return false;
  const legacy=process.env.REP_CHATGPT_TOKEN||'';
  if(legacy){const a=createHash('sha256').update(token).digest(),b=createHash('sha256').update(legacy).digest();if(timingSafeEqual(a,b))return true;}
