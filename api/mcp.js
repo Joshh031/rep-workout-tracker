@@ -43,6 +43,7 @@ export default async function handler(req,res){
  if(msg.method==='tools/call'){
   const name=msg.params?.name,args=msg.params?.arguments||{};
   if(!TOOL_LIST.some(t=>t.name===name))return fail(res,msg.id,-32602,'Unknown tool');
+  if(name==='rep_save_workout'&&!(await authorizeMcp(req,'rep:write')))return reply(res,msg.id,{isError:true,content:[{type:'text',text:'Not authorized to save workouts (rep:write permission required).'}]});
   if(name==='rep_save_workout'&&args.confirmed!==true)return reply(res,msg.id,{isError:true,content:[{type:'text',text:'Not saved: explicit confirmation is required.'}]});
   const {status,payload}=await invokeWorkoutApi(req,name==='rep_get_workouts'?'GET':'POST',args);
   return reply(res,msg.id,{isError:status>=400,content:[{type:'text',text:JSON.stringify(payload)}]});
