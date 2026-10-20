@@ -3,8 +3,8 @@
 import {createHash,createPublicKey,verify,timingSafeEqual} from 'node:crypto';
 let cache={url:'',until:0,keys:[]};
 const decode=s=>JSON.parse(Buffer.from(s,'base64url').toString('utf8'));
-async function trustedKeys(url){
- if(cache.url===url&&cache.until>Date.now())return cache.keys;
+async function trustedKeys(url,refresh=false){
+ if(!refresh&&cache.url===url&&cache.until>Date.now())return cache.keys;
  const resp=await fetch(url,{signal:AbortSignal.timeout(4000)});
  if(!resp.ok)throw Error('JWKS unavailable');
  const body=await resp.json();
@@ -13,7 +13,7 @@ async function trustedKeys(url){
  return cache.keys;
 }
 export async function authorizeMcp(req,requiredScope='rep:read'){
- const token=String(req.headers?.authorization||'').replace(/^Bearer\s+/i,'');
+ const token=String(req.headers?.authorization||'').match(/^Bearer\s+(\S+)$/i)?.[1];
  if(!token||token.length>8192)return false;
  const legacy=process.env.REP_CHATGPT_TOKEN||'';
  if(legacy){const a=createHash('sha256').update(token).digest(),b=createHash('sha256').update(legacy).digest();if(timingSafeEqual(a,b))return true;}
@@ -27,7 +27,9 @@ export async function authorizeMcp(req,requiredScope='rep:read'){
   const now=Math.floor(Date.now()/1000);
   if(!String(claims.scope||'').split(' ').includes(requiredScope))return false;
   if(claims.iss!==issuer||claims.sub!==subject||!(Array.isArray(claims.aud)?claims.aud.includes(audience):claims.aud===audience)||!Number.isFinite(claims.exp)||claims.exp<=now||claims.nbf>now||claims.iat>now+60)return false;
-  const jwk=(await trustedKeys(url.href)).find(k=>k.kid===kid&&k.use!=='enc'&&(!k.alg||k.alg===alg));
+  const matches=k=>k.kid===kid&&k.use!=='enc'&&(!k.alg||k.alg===alg);
+  let jwk=(await trustedKeys(url.href)).find(matches);
+  if(!jwk)jwk=(await trustedKeys(url.href,true)).find(matches);
   if(!jwk)return false;
   const key=createPublicKey({key:jwk,format:'jwk'});
   return verify('sha256',Buffer.from(h+'.'+p),alg==='ES256'?{key,dsaEncoding:'ieee-p1363'}:key,Buffer.from(s,'base64url'));
