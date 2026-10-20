@@ -1,6 +1,6 @@
 // Private, stateless MCP Streamable HTTP adapter for REP.
 // Keeps authentication, validation and persistence in the existing workout API.
-import {createHash,timingSafeEqual} from 'node:crypto';
+import {authorizeMcp} from './_oauth.js';
 import workoutApi from './chatgpt-workouts.js';
 
 const VERSION='2025-03-26';
@@ -16,15 +16,9 @@ const TOOL_LIST=[
 ];
 const reply=(res,id,result)=>res.status(200).json({jsonrpc:'2.0',id,result});
 const fail=(res,id,code,message,status=200)=>res.status(status).json({jsonrpc:'2.0',id,error:{code,message}});
-function authorized(req){
- const secret=process.env.REP_CHATGPT_TOKEN||'';
- const got=String(req.headers?.authorization||'').replace(/^Bearer\s+/i,'');
- if(!secret||!got)return false;
- return timingSafeEqual(createHash('sha256').update(secret).digest(),createHash('sha256').update(got).digest());
-}
 function invokeWorkoutApi(req,method,args={}){
  return new Promise(resolve=>{
-   const fake={method,headers:req.headers,query:{limit:args.limit},body:args};
+   const fake={method,headers:{authorization:'Bearer '+(process.env.REP_CHATGPT_TOKEN||'')},query:{limit:args.limit},body:args};
    const res={status(n){this.code=n;return this},json(payload){resolve({status:this.code||200,payload});return this},setHeader(){}};
    Promise.resolve(workoutApi(fake,res)).catch(()=>resolve({status:500,payload:{error:'Workout service unavailable'}}));
  });
@@ -32,7 +26,10 @@ function invokeWorkoutApi(req,method,args={}){
 export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
  res.setHeader('MCP-Protocol-Version',VERSION);
- if(!authorized(req))return res.status(401).json({error:'Unauthorized'});
+ if(!(await authorizeMcp(req))){
+  res.setHeader('WWW-Authenticate','Bearer resource_metadata="https://rep-workout-tracker.vercel.app/.well-known/oauth-protected-resource"');
+  return res.status(401).json({error:'Unauthorized'});
+ }
  if(req.method==='GET')return res.status(405).json({error:'This MCP endpoint uses POST'});
  if(req.method==='DELETE')return res.status(200).end();
  if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
