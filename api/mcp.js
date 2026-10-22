@@ -7,7 +7,7 @@ const VERSIONS=['2025-03-26','2025-06-18','2025-11-25'];
 const VERSION=VERSIONS.at(-1);
 const METADATA='https://rep-workout-tracker.vercel.app/.well-known/oauth-protected-resource';
 const ORIGINS=new Set(['https://chatgpt.com','https://rep-workout-tracker.vercel.app']);
-const TYPES=['chest','back','legs','shoulders','biceps','triceps','running'];
+const TYPES=['chest','back','legs','shoulders','biceps','triceps','run'];
 const instructions='Use REP as the source of truth for Workout Goals coaching. Read recorded workouts before discussing progression or saving. Interpret NxRxW as sets x reps x pounds; expand every group, including semicolon-separated groups. Confirm the date (America/New_York), workout type, names and all sets, reps and weights before saving; clarify ambiguity. Never save plans. Reuse the same idempotencyKey on retries. After saving, read back the returned workout ID and report only verified data. For runs, confirm cumulative stops, total distance, elapsed time and maximum speed; use rep_save_run. Keep coaching in the current conversation.';
 const TOOL_LIST=[
  {name:'rep_get_workouts',title:'Read REP workouts',description:'Read actual saved REP workouts for progression or duplicate checking. Filter by date, workout type or workout ID; use offset to page through older history. No changes.',
