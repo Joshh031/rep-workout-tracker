@@ -15,7 +15,7 @@ test('MCP exposes only protocol and tool descriptions before OAuth, without data
   const init=await run('POST',{jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25'}});
   assert.equal(init.status,200);assert.equal(init.body.result.serverInfo.version,'1.1.1');
   const list=await run('POST',{jsonrpc:'2.0',id:2,method:'tools/list'});
-  assert.deepEqual(list.body.result.tools.map(t=>t.name),['rep_get_workouts','rep_save_workout']);
+  assert.deepEqual(list.body.result.tools.map(t=>t.name),['rep_get_workouts','rep_save_run','rep_save_workout']);
   for(const tool of list.body.result.tools)assert.ok(tool.securitySchemes.every(s=>s.type==='oauth2'));
   assert.equal(requests,0);
  }finally{globalThis.fetch=originalFetch;}
@@ -24,7 +24,7 @@ test('missing and malformed tokens produce in-chat OAuth challenges and never ac
  const originalFetch=globalThis.fetch;let requests=0;
  globalThis.fetch=async()=>{requests++;throw Error('Unauthenticated calls must not reach database')};
  try{
-  const cases=[['rep_get_workouts',{limit:1}],['rep_save_workout',{date:'2026-10-20',type:'chest',text:'Bench press 1x8x225',idempotencyKey:'synthetic-denied-test-key',confirmed:true}]];
+  const cases=[['rep_get_workouts',{limit:1}],['rep_save_run',{date:'2026-10-22',distanceMiles:3.32,durationSeconds:1800,maxSpeedMph:7.5,idempotencyKey:'test-running-not-allowed',confirmed:true}],['rep_save_workout',{date:'2026-10-20',type:'chest',text:'Bench press 1x8x225',idempotencyKey:'synthetic-denied-test-key',confirmed:true}]];
   for(const authorization of [undefined,'Bearer not-a-valid-token']){
    for(const [name,args] of cases){
     const x=await run('POST',{jsonrpc:'2.0',id:3,method:'tools/call',params:{name,arguments:args}},authorization);
@@ -49,7 +49,7 @@ test('MCP negotiates supported versions and advertises permissions and workflow'
    assert.equal(init.body.result.protocolVersion,version);assert.match(init.body.result.instructions,/read back/i);
   }
   const list=await run('POST',{jsonrpc:'2.0',id:2,method:'tools/list'},auth);
-  assert.deepEqual(list.body.result.tools.map(t=>t.name),['rep_get_workouts','rep_save_workout']);
+  assert.deepEqual(list.body.result.tools.map(t=>t.name),['rep_get_workouts','rep_save_run','rep_save_workout']);
   assert.equal(list.body.result.tools[0].annotations.readOnlyHint,true);
   assert.deepEqual(list.body.result.tools[1].securitySchemes,[{type:'oauth2',scopes:['rep:read','rep:write']}]);
   const reject=await run('POST',{jsonrpc:'2.0',id:3,method:'tools/call',params:{name:'rep_save_workout',arguments:{}}},auth);
