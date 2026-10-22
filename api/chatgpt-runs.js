@@ -27,13 +27,13 @@ export default async function handler(req,res){
   previousTime=s.elapsedSeconds;previousDistance=s.distanceMiles;
  }
  const running={distanceMiles,durationSeconds,stops,maxSpeedMph,notes};
- const canonicalHash=createHash('sha256').update(JSON.stringify({date,type:'running',running:{distanceMiles,durationSeconds,stops,maxSpeedMph}})).digest('hex');
+ const canonicalHash=createHash('sha256').update(JSON.stringify({date,type:'run',running:{distanceMiles,durationSeconds,stops,maxSpeedMph}})).digest('hex');
  const id='gpt-run-'+createHash('sha256').update(idempotencyKey).digest('hex').slice(0,24);
- const entry={id,date:displayDate(date),type:'running',running,source:'chatgpt',canonicalHash};
+ const entry={id,date:displayDate(date),type:'run',running,source:'chatgpt',canonicalHash};
  try{
   const sameId=(await db(new URLSearchParams({user_id:'eq.'+uid,'data->>id':'eq.'+id,limit:'1'})))[0]?.data;
   if(sameId){if(sameId.canonicalHash!==canonicalHash)return json(res,409,{error:'Idempotency key conflict; no changes made'});return json(res,200,{saved:true,duplicate:true,run:sameId});}
-  const existing=await db(new URLSearchParams({user_id:'eq.'+uid,'data->>date':'eq.'+entry.date,'data->>type':'eq.running'}));
+  const existing=await db(new URLSearchParams({user_id:'eq.'+uid,'data->>date':'eq.'+entry.date,'data->>type':'eq.run'}));
   const duplicate=existing.find(r=>r.data?.canonicalHash===canonicalHash||(
    r.data?.running?.distanceMiles===distanceMiles&&r.data?.running?.durationSeconds===durationSeconds))?.data;
   if(duplicate)return json(res,200,{saved:true,duplicate:true,run:duplicate});
