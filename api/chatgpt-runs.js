@@ -29,7 +29,10 @@ export default async function handler(req,res){
  const running={distanceMiles,durationSeconds,stops,maxSpeedMph,notes};
  const canonicalHash=createHash('sha256').update(JSON.stringify({date,type:'run',running:{distanceMiles,durationSeconds,stops,maxSpeedMph}})).digest('hex');
  const id='gpt-run-'+createHash('sha256').update(idempotencyKey).digest('hex').slice(0,24);
- const entry={id,date:displayDate(date),type:'run',running,source:'chatgpt',canonicalHash};
+ const mmss=seconds=>Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
+ const paceSeconds=Math.round(durationSeconds/distanceMiles);
+ const runData={distance:String(distanceMiles),duration:mmss(durationSeconds),pace:mmss(paceSeconds),maxSpeed:String(maxSpeedMph),firstStop:stops.length?mmss(stops[0].elapsedSeconds)+' / '+stops[0].distanceMiles+' mi':'',notes,stops};
+ const entry={id,date:displayDate(date),type:'run',runData,running,source:'chatgpt',canonicalHash};
  try{
   const sameId=(await db(new URLSearchParams({user_id:'eq.'+uid,'data->>id':'eq.'+id,limit:'1'})))[0]?.data;
   if(sameId){if(sameId.canonicalHash!==canonicalHash)return json(res,409,{error:'Idempotency key conflict; no changes made'});return json(res,200,{saved:true,duplicate:true,run:sameId});}
