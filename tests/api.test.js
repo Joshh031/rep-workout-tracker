@@ -15,13 +15,22 @@ describe("checkAuth", () => {
     assert.equal(checkAuth({ headers: {}, query: {} }, res), false);
     assert.equal(res.statusCode, 500);
   });
-  test("401 on mismatch, true on header or ?s= match", () => {
+  test("only a matching string header authenticates; URL secrets never do", () => {
     process.env.APP_SECRET = "pass";
     const bad = mockRes();
     assert.equal(checkAuth({ headers: { "x-app-secret": "nope" }, query: {} }, bad), false);
     assert.equal(bad.statusCode, 401);
     assert.equal(checkAuth({ headers: H, query: {} }, mockRes()), true);
-    assert.equal(checkAuth({ headers: {}, query: { s: "pass" } }, mockRes()), true);
+    for (const req of [
+      { headers: {}, query: { s: "pass" } },
+      { headers: { "x-app-secret": "wrong" }, query: { s: "pass" } },
+      { headers: { "x-app-secret": ["pass"] }, query: {} },
+      { query: { s: "pass" } },
+    ]) {
+      const response = mockRes();
+      assert.equal(checkAuth(req, response), false);
+      assert.equal(response.statusCode, 401);
+    }
   });
 });
 
@@ -77,6 +86,12 @@ describe("/api/data", () => {
   test("a 401 from the passphrase never reaches Supabase", async () => {
     const res = mockRes();
     await dataHandler({ method: "GET", headers: { "x-app-secret": "wrong" }, query: { table: "workouts" } }, res);
+    assert.equal(res.statusCode, 401);
+    assert.equal(f.calls.length, 0);
+  });
+  test("the correct passphrase in the URL cannot read private data", async () => {
+    const res = mockRes();
+    await dataHandler({ method: "GET", headers: {}, query: { table: "workouts", s: "pass" } }, res);
     assert.equal(res.statusCode, 401);
     assert.equal(f.calls.length, 0);
   });

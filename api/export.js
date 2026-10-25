@@ -1,6 +1,5 @@
 // Export the user's workout history for outside analysis. Requires the
-// passphrase like every other route (header or ?s=, so a tool can fetch it
-// from a link — the History tab's COPY LINK button produces that link).
+// x-app-secret header like every other app route. URLs never carry credentials.
 //
 // GET /api/export?format=csv          -> one row per set (strength sessions only)
 // GET /api/export?format=json         -> every session, incl. runs and timing
@@ -19,11 +18,11 @@ const escapeHtml = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 // thousands of rows is what made the old page crawl on a phone.
 const jsString = (t) => JSON.stringify(t).replace(/<\//g, "<\\/");
 
-// When a browser (Accept: text/html) opens the link it gets a light page:
+// An authenticated client requesting Accept: text/html gets a light page:
 // a short preview plus SAVE FILE (share sheet → Save to Files / AirDrop),
 // COPY ALL (clipboard) and DOWNLOAD. Tools that fetch the link (curl,
 // requests, an LLM app) send */* and get the raw text.
-const htmlPage = ({ text, filename, mime, count, unit }, downloadUrl) => {
+const htmlPage = ({ text, filename, mime, count, unit }) => {
   const lines = text.split("\n");
   const preview = lines.slice(0, 12).join("\n");
   const more = Math.max(0, lines.length - 13);
@@ -46,7 +45,7 @@ const htmlPage = ({ text, filename, mime, count, unit }, downloadUrl) => {
 <div class="row">
   <button id="save" class="primary">⇡ SAVE FILE</button>
   <button id="copy">⎘ COPY ALL</button>
-  <a class="btn" id="dl" href="${downloadUrl}">⇣ DOWNLOAD</a>
+  <a class="btn" id="dl">⇣ DOWNLOAD</a>
 </div>
 <div id="msg"></div>
 <pre>${escapeHtml(preview)}</pre>
@@ -55,6 +54,12 @@ ${more ? `<div class="more">… ${more} more rows in the file</div>` : ""}
   const DATA = ${jsString(text)}, NAME = ${jsString(filename)}, MIME = ${jsString(mime)};
   const msg = document.getElementById("msg"), say = (t) => { msg.textContent = t; };
   const file = () => new File([DATA], NAME, { type: MIME });
+  // The already-authorized data becomes a local download; no credential-bearing URL.
+  const download = document.getElementById("dl");
+  const downloadUrl = URL.createObjectURL(file());
+  download.href = downloadUrl;
+  download.download = NAME;
+  window.addEventListener("pagehide", () => URL.revokeObjectURL(downloadUrl), { once: true });
   const save = document.getElementById("save");
   if (!(navigator.canShare && navigator.canShare({ files: [file()] }))) {
     // No share sheet here (desktop browser): SAVE FILE just downloads
@@ -105,11 +110,12 @@ export default async function handler(req, res) {
     const { text, filename, mime } = built;
     res.status(200);
     res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("X-Content-Type-Options", "nosniff");
     const wantsHtml = !q.raw && !q.download && /text\/html/.test(req.headers?.accept || "");
     if (wantsHtml) {
-      const params = new URLSearchParams({ format, download: "1", ...(q.s ? { s: q.s } : {}), ...(q.user_id ? { user_id: q.user_id } : {}) });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.send(htmlPage(built, `/api/export?${params}`));
+      return res.send(htmlPage(built));
     }
     if (q.download) {
       res.setHeader("Content-Type", mime + "; charset=utf-8");

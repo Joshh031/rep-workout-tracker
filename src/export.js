@@ -1,5 +1,5 @@
 // Workout export helpers, shared by the app (share/copy from the History
-// tab) and /api/export (link-based download). Pure functions, no I/O.
+// tab) and /api/export (authenticated download). Pure functions, no I/O.
 
 // "8/20/2026" -> "2026-08-20" so spreadsheets and pandas sort it correctly
 export const isoDate = (mdy) => {

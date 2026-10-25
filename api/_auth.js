@@ -10,9 +10,9 @@ export function checkAuth(req, res) {
     res.status(500).json({ error: "APP_SECRET is not configured in Vercel environment variables" });
     return false;
   }
-  // Header is the normal path; ?s= allows browser-address-bar debugging
-  // (e.g. /api/oura?debug=1&s=...).
-  const got = String(req.headers["x-app-secret"] || req.query?.s || "");
+  // Credentials must stay out of URLs, browser history and access logs.
+  const header = req.headers?.["x-app-secret"];
+  const got = typeof header === "string" ? header : "";
   const a = createHash("sha256").update(got).digest();
   const b = createHash("sha256").update(expected).digest();
   if (!timingSafeEqual(a, b)) {

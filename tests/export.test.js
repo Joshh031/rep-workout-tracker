@@ -1,5 +1,6 @@
 import { test, describe, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { runInNewContext } from "node:vm";
 import { mockRes, stubFetch } from "./helpers.js";
 import { isoDate, sortSessions, sessionsToCsv, sessionsToJson, buildExport } from "../src/export.js";
 import exportHandler from "../api/export.js";
@@ -86,11 +87,15 @@ describe("/api/export", () => {
     f = stubFetch([["/rest/v1/workouts", () => [{ data: legs }]]]);
     const browser = { accept: "text/html,application/xhtml+xml,*/*;q=0.8", "x-app-secret": "pass" };
     let res = mockRes();
-    await exportHandler({ method: "GET", headers: browser, query: { format: "csv", s: "pass" } }, res);
+    await exportHandler({ method: "GET", headers: browser, query: { format: "csv", s: "must-not-be-reflected" } }, res);
     assert.match(res.headers["Content-Type"], /^text\/html/);
     assert.match(res.body, /SAVE FILE/);
     assert.match(res.body, /COPY ALL/);
-    assert.match(res.body, /href="\/api\/export\?format=csv&amp;download=1&amp;s=pass"|href="\/api\/export\?format=csv&download=1&s=pass"/);
+    assert.match(res.body, /URL.createObjectURL\(file\(\)\)/);
+    assert.match(res.body, /download.download = NAME/);
+    assert.ok(!res.body.includes("must-not-be-reflected"));
+    assert.ok(!res.body.includes("/api/export?"));
+    assert.equal(res.headers["Referrer-Policy"], "no-referrer");
     assert.match(res.body, /Good Mornings, RDL style/); // data is embedded for the buttons
     assert.ok(!/<textarea/.test(res.body), "no heavy textarea in the page");
     res = mockRes();
@@ -108,6 +113,28 @@ describe("/api/export", () => {
     assert.match(res.headers["Content-Type"], /^text\/csv/);
     assert.match(res.headers["Content-Disposition"], /attachment; filename="rep-workouts-\d{4}-\d{2}-\d{2}\.csv"/);
   });
+  test("the authenticated HTML export downloads its embedded data without another API request", async () => {
+    f = stubFetch([["/rest/v1/workouts", () => [{ data: legs }]]]);
+    const res = mockRes();
+    await exportHandler({ method: "GET", headers: { ...H, accept: "text/html" }, query: {} }, res);
+    const script = res.body.match(/<script>([\s\S]*?)<\/script>/)[1];
+    let file, clicked = 0, cleanup;
+    const elements = { dl: { click() { clicked++; } }, msg: {}, save: {}, copy: {} };
+    runInNewContext(script, {
+      File,
+      URL: { createObjectURL(value) { file = value; return "blob:local-export"; }, revokeObjectURL() {} },
+      document: { getElementById(id) { return elements[id]; } },
+      navigator: {},
+      window: { addEventListener(event, fn) { assert.equal(event, "pagehide"); cleanup = fn; } },
+    });
+    assert.equal(elements.dl.href, "blob:local-export");
+    assert.match(elements.dl.download, /^rep-workouts-.*\.csv$/);
+    assert.equal(await file.text(), buildExport([legs], "csv").text);
+    elements.save.onclick();
+    assert.equal(clicked, 1);
+    assert.equal(typeof cleanup, "function");
+    assert.equal(f.calls.length, 1);
+  });
   test("json format wraps sessions with an export timestamp", async () => {
     f = stubFetch([["/rest/v1/workouts", () => [{ data: legs }]]]);
     const res = mockRes();
@@ -122,6 +149,15 @@ describe("/api/export", () => {
     const res = mockRes();
     await exportHandler({ method: "GET", headers: {}, query: {} }, res);
     assert.equal(res.statusCode, 401);
+    assert.equal(f.calls.length, 0);
+  });
+  test("a URL passphrase cannot download or render workout exports", async () => {
+    f = stubFetch([]);
+    for (const query of [{ s: "pass" }, { s: "pass", download: "1" }]) {
+      const res = mockRes();
+      await exportHandler({ method: "GET", headers: { accept: "text/html" }, query }, res);
+      assert.equal(res.statusCode, 401);
+    }
     assert.equal(f.calls.length, 0);
   });
 });

@@ -3003,12 +3003,6 @@ function HistoryTab({ history, setHistory, deleteWorkout, dailyLog, setDailyLog,
       .then(() => setExportMsg(`✓ copied ${count} ${unit} — paste into your analysis tool`))
       .catch(e => setExportMsg(`✗ ${e.message}`));
   };
-  const copyLink = () => {
-    const url = `${window.location.origin}/api/export?format=csv&s=${encodeURIComponent(getSecret())}`;
-    navigator.clipboard.writeText(url)
-      .then(() => setExportMsg("✓ link copied — it includes your passphrase, so treat it like a password"))
-      .catch(e => setExportMsg(`✗ ${e.message}`));
-  };
 
   const all = [
     ...history.map(h => ({ ...h, _kind: "workout" })),
@@ -3350,7 +3344,7 @@ Be direct, data-driven, specific. Use actual numbers from the data. Keep it unde
                 ["share-csv", "⇡ SHARE CSV", () => shareExport("csv")],
                 ["share-json", "⇡ SHARE JSON", () => shareExport("json")],
                 ["copy-csv", "⎘ COPY CSV", () => copyExport("csv")],
-                ["copy-link", "🔗 COPY LINK", copyLink],
+                ["copy-json", "⎘ COPY JSON", () => copyExport("json")],
               ].map(([key, label, fn]) => (
                 <button key={key} data-export={key} onClick={fn} disabled={!history.length}
                   style={{ ...g.button, fontSize: 10, padding: "8px 10px", background: "#1a1a1a", color: "#ddd", border: "1px solid #333", opacity: history.length ? 1 : 0.4 }}>

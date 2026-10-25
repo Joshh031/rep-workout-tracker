@@ -6,7 +6,7 @@
 // GET /api/oura?start=YYYY-MM-DD&end=YYYY-MM-DD  -> { nights, coverage } for backfill
 // GET /api/oura?activity=YYYY-MM-DD              -> { day, steps } from daily_activity
 // GET /api/oura?activity_start=&activity_end=    -> { days: [{day, steps}] }
-// GET /api/oura?debug=1&start=&end=&s=<pass>     -> raw per-day tagging for diagnosis
+// GET /api/oura?debug=1&start=&end= (x-app-secret header required) -> raw per-day tagging
 
 import { checkAuth } from "./_auth.js";
 import { DATE_RE, hmm, isoDaysAgo, fetchAll, fetchNights, mapNight } from "./_oura.js";
